@@ -1,0 +1,100 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Erlang/OTP
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: '27'
+          rebar3-version: 'latest'
+
+      - name: Restore rebar3 cache
+        uses: actions/cache@v4
+        with:
+          path: _build
+          key: rebar3-${{ runner.os }}-${{ hashFiles('rebar.lock', 'rebar.config') }}
+          restore-keys: |
+            rebar3-${{ runner.os }}-
+
+      - name: Compile
+        run: rebar3 compile
+
+      - name: Run EUnit tests
+        run: rebar3 eunit
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ vars.VPS_PORT || '22' }}
+          script: |
+            set -e
+
+            # Navigate to project directory
+            cd ${{ vars.PROJECT_PATH || '/opt/aurix' }}
+
+            # Pull latest code
+            git fetch origin main
+            git reset --hard origin/main
+
+            # Write .env from GitHub secrets/variables
+            echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" > .env
+            echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
+            echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env
+            echo "DATABASE_URL=postgres://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@postgres:5432/${{ secrets.POSTGRES_DB }}" >> .env
+            echo "REDIS_URL=redis://redis:6379" >> .env
+            echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env
+            echo "PORT=8080" >> .env
+            echo "GOLD_PRICE_EUR=${{ vars.GOLD_PRICE_EUR || '65.00' }}" >> .env
+            echo "SEED_BALANCE_EUR_CENTS=${{ vars.SEED_BALANCE_EUR_CENTS || '1000000' }}" >> .env
+            echo "DEMO_ADMIN_EMAIL=${{ vars.DEMO_ADMIN_EMAIL || '' }}" >> .env
+            echo "DEMO_ADMIN_PASSWORD=${{ secrets.DEMO_ADMIN_PASSWORD }}" >> .env
+            echo "DEMO_USER_EMAIL=${{ vars.DEMO_USER_EMAIL || '' }}" >> .env
+            echo "DEMO_USER_PASSWORD=${{ secrets.DEMO_USER_PASSWORD }}" >> .env
+            echo "DEMO_TENANT=${{ vars.DEMO_TENANT || 'aurix-demo' }}" >> .env
+            echo "REACT_APP_API_URL=${{ vars.REACT_APP_API_URL || 'http://localhost:8080' }}" >> .env
+            echo "CORS_ORIGIN=${{ vars.CORS_ORIGIN }}" >> .env
+
+            # Build and deploy
+            docker compose pull postgres redis || true
+            docker compose build --no-cache backend frontend
+            docker compose up -d --force-recreate --remove-orphans
+
+            # Wait for health check
+            echo "Waiting for backend health..."
+            for i in $(seq 1 30); do
+              if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
+                echo "Backend is healthy!"
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "Health check failed after 30 attempts"
+                docker compose logs backend --tail=50
+                exit 1
+              fi
+              sleep 5
+            done
+
+            # Show running services
+            docker compose ps
+
+            # Clean up old images
+            docker image prune -f

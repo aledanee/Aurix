@@ -49,6 +49,7 @@ services:
       DEMO_USER_EMAIL: ${DEMO_USER_EMAIL:-}
       DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-}
       DEMO_TENANT: ${DEMO_TENANT:-aurix-demo}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
     depends_on:
       postgres:
         condition: service_healthy

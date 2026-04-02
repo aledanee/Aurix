@@ -1,27 +1,35 @@
-# Aurix - Internship Evaluation Submission
+# Aurix — Digital Gold Trading Platform
 
-Aurix is a production-oriented multi-tenant fintech backend for digital gold trading, built to satisfy an internship evaluation focused on backend systems design, reliable financial transaction handling, AI-assisted insight delivery, and deployment readiness. The project combines Erlang/OTP supervision, Cowboy HTTP APIs, PostgreSQL persistence, Redis-backed operational controls, a Dockerized React frontend, and a clear handler/service/repository architecture. The result is not just a feature demo: it is a practical backend design with tenant isolation, append-only ledgering, atomic write paths, structured insight generation, OpenAPI documentation, and automated tests.
+## The Story
 
-## What This Project Delivers
+Erlang came out of Ericsson in the late 1980s to keep telecom switches alive — millions of concurrent connections, zero downtime, hot code reloading mid-call. In my production work I pair it with Java Spring Boot as complementary layers: Spring owns the rich business logic and ecosystem integrations, Erlang owns the pressure — the fault-tolerant, high-throughput runtime core that refuses to go down. Each technology doing what it does best, the whole greater than its parts. When you're building a fintech backend where downtime is measured in lost money, that same telecom DNA fits like it was always meant to.
 
-| Evaluation area | Delivery in Aurix |
+When the task landed on WhatsApp I put on [Mozart's Symphony No. 40](https://www.youtube.com/watch?v=UBfsS1EGyWc) and started coding — I'd recommend hitting play while you read through the codebase. I'm also an Oud player (the Arabic string instrument), so the thread between music and craftsmanship runs deep for me; building software, like playing an instrument, is about feel, patience, and knowing when to let the structure breathe. That same philosophy shaped what follows.
+
+Aurix is a multi-tenant fintech backend for digital gold trading. Not a demo. Not a prototype. A production-grade system — Erlang/OTP supervision, Cowboy HTTP, PostgreSQL, Redis, a Dockerized React frontend, and a clean handler/service/repository architecture. Tenant isolation, append-only ledgering, atomic write paths, AI-driven insight generation, OpenAPI docs, and real tests. The kind of backend you'd actually deploy.
+
+## What It Delivers
+
+| Area | What I Built |
 | --- | --- |
-| Core wallet service | JWT-protected wallet APIs, buy and sell flows, transaction history, idempotent trade requests, and balance updates tied to ledger entries |
-| Multi-tenant architecture | Shared-schema tenancy with `tenant_id` on tenant-scoped data, tenant-aware repository queries, tenant isolation tests, and JWT-scoped authenticated access |
-| AI insights layer | Structured trading signals exposed through an agent service and turned into readable client-facing insight text by a mocked LLM-style formatter |
-| ETL pipeline | Scheduled aggregation of transaction activity into persisted insight snapshots for daily and weekly reporting |
-| Scaling and design thinking | Stateless API shape, Redis rate limiting and caching, cursor pagination, outbox events, supervision boundaries, and clean API contracts |
-| Bonus features | Dockerized backend and frontend, Swagger UI and OpenAPI spec, admin endpoints, privacy endpoints, automated tests, and event logging via the outbox pattern |
+| **Wallet service** | JWT-protected buy/sell flows, transaction history, idempotent trades, balance updates tied to ledger entries |
+| **Multi-tenancy** | Shared-schema with `tenant_id` everywhere it matters — tenant-aware queries, isolation tests, JWT-scoped access |
+| **AI insights** | Structured trading signals through an agent service, formatted into readable client-facing text by a mocked LLM adapter |
+| **ETL pipeline** | Scheduled aggregation of transaction activity into persisted insight snapshots — daily and weekly |
+| **Scale thinking** | Stateless APIs, Redis rate limiting + caching, cursor pagination, outbox events, supervision boundaries |
+| **Extras** | Docker everything, Swagger UI + OpenAPI spec, admin endpoints, privacy endpoints, automated tests, outbox pattern |
 
-## Tech Stack
+## The Stack
 
-- Backend: Erlang/OTP 27, Cowboy HTTP server, pgapp with epgsql, PostgreSQL 16, Redis 7
-- Authentication and security: JWT access and refresh tokens, refresh rotation, bcrypt password hashing, rate limiting, JWT blacklist support
-- Frontend: React 18, Node 22, Dockerized frontend container
-- API and documentation: Swagger UI at `/swagger`, OpenAPI spec in `priv/swagger/openapi.json`, endpoint docs in `docs/api/`
-- Background processing: OTP workers for price updates, outbox dispatch, ETL scheduling, and reconciliation
+I don't pick tools because they're trendy. I pick them because they fit.
 
-## Architecture Summary
+- **Backend**: Erlang/OTP 27, Cowboy, pgapp + epgsql, PostgreSQL 16, Redis 7
+- **Auth & security**: JWT access + refresh tokens (rotated), bcrypt, rate limiting, JWT blacklist
+- **Frontend**: React 18, Node 22, Dockerized
+- **Docs**: Swagger UI at `/swagger`, OpenAPI spec in `priv/swagger/openapi.json`, per-endpoint writeups in `docs/api/`
+- **Background workers**: OTP processes for price updates, outbox dispatch, ETL scheduling, reconciliation
+
+## How It's Wired
 
 ```text
 React frontend
@@ -29,45 +37,68 @@ React frontend
     v
 Cowboy router
     |
-    +--> Handlers      -> parse HTTP, validate input, extract auth context, return JSON
+    +--> Handlers      -> HTTP concerns only — parse, validate, extract auth, return JSON
             |
             v
         Services       -> business rules, orchestration, DB transaction boundaries
             |
             v
-        Repositories   -> tenant-scoped SQL only
+        Repositories   -> tenant-scoped SQL, nothing else
             |
             v
         PostgreSQL
 
-Redis                  -> rate limiting, JWT support, insight response cache
-Outbox dispatcher      -> processes committed wallet events and provides a Kafka-ready handoff point
-ETL scheduler          -> aggregates transaction data into insight snapshots
-Agent service          -> loads snapshots and formats signals into readable insights
-Mocked LLM adapter     -> converts structured signals into final user-facing insight text
+Redis                  -> rate limiting, JWT support, insight cache
+Outbox dispatcher      -> committed wallet events → Kafka-ready handoff point
+ETL scheduler          -> transaction data → insight snapshots
+Agent service          -> snapshots → formatted trading signals
+Mocked LLM adapter     -> structured signals → readable insight text
 ```
 
-Aurix follows a strict handler/service/repository split. Handlers deal with HTTP concerns only. Services hold business rules, token issuance, trade execution, and transaction orchestration. Repositories stay focused on SQL and persistence. This keeps the API readable, the trade path testable, and the tenancy rules enforceable in one place.
+Strict handler/service/repository split. Handlers know about HTTP. Services know about business logic. Repositories know about SQL. Nobody crosses the line. That discipline is what makes the trade path testable and the tenancy rules enforceable in one place — not scattered across handlers.
 
-At the OTP level, HTTP is supervised separately from Redis, the rate limiter, the outbox dispatcher, the ETL scheduler, and reconciliation workers. The top-level supervision strategy is `one_for_one`, which means a failure in ETL or background processing does not take down the HTTP stack.
+OTP supervision keeps things isolated too. HTTP sits in its own supervision tree, separate from Redis, the rate limiter, the outbox dispatcher, ETL, and reconciliation workers. Strategy is `one_for_one` — if ETL crashes, your API doesn't go down with it.
 
-## Financial and Tenancy Guarantees
+## The Money Rules
 
-- EUR values are stored as `bigint` cents, so money is not persisted as floating-point values.
-- Gold balances and trade quantities are stored as fixed-precision numeric values and exposed through the API as decimal strings.
-- Tenant isolation uses a shared schema with `tenant_id` on tenant-scoped tables.
-- On authenticated routes, `tenant_id` comes from JWT claims only. Clients do not send tenant context for protected APIs.
-- The transaction ledger is append-only. Trade history is written as new rows rather than updated in place.
-- A wallet trade updates the wallet, inserts the ledger row, and inserts the outbox event inside one database transaction.
-- Wallet writes use `Idempotency-Key` headers, row-level locking, and versioned updates to make retries and concurrent trade requests safe.
+In fintech, the details are the product. Here's how I treat money:
 
-## Authentication Model
+- EUR values are `bigint` cents — no floating-point anywhere near money
+- Gold balances and trade quantities are fixed-precision numeric, exposed as decimal strings
+- Tenant isolation via shared schema with `tenant_id` on every tenant-scoped table
+- On authenticated routes, `tenant_id` comes from JWT claims only — clients never send tenant context
+- The ledger is append-only. Trades are new rows, not updates. History is sacred.
+- A single trade = wallet update + ledger row + outbox event, all inside one DB transaction
+- Idempotency keys, row-level locking, versioned updates — retries and concurrency handled
 
-- `POST /auth/register` requires `tenant_code`, `email`, and `password`.
-- `POST /auth/login` supports smart email and password login. If one active tenant matches, login succeeds without `tenant_code`. If multiple matching tenants remain, the API returns `tenant_selection_required` and the client re-submits with the selected `tenant_code`.
-- Authenticated sessions use JWT access tokens plus refresh tokens. Refresh tokens are rotated on refresh, and password changes revoke refresh tokens and invalidate existing access tokens.
+## The AI Layer
 
-## Implemented API Surface
+The insight engine has three moving parts:
+
+1. **ETL Scheduler** (`src/etl/aurix_etl_scheduler.erl`) — A `gen_server` that fires every hour (or on-demand via `POST /admin/etl/trigger`). It reads new transactions since the last watermark, groups them by tenant + user, computes summary signals (buy count, sell count, average price, frequency, sell-after-buy ratio, inactivity days), and persists the result as `insight_snapshots` in PostgreSQL.
+
+2. **Agent Service** (`src/services/aurix_agent_service.erl`) — When a client hits `GET /insights`, this service loads the user's snapshots from the DB, then passes each snapshot's signals through the LLM adapter to generate readable insight text. Cursor-paginated, frequency-filterable.
+
+3. **Mocked LLM Adapter** (`src/etl/aurix_llm_adapter.erl`) — This is where the "AI" lives. Right now it's four rule-based insight generators:
+   - **High buy frequency** — more than 3 buys → "Consider spacing out your purchases"
+   - **Buying above average** — avg price > 105% of reference → "Consider waiting for a dip"
+   - **Sell-after-buy pattern** — sell/buy ratio > 50% → "Consider holding longer to reduce fee impact"
+   - **Low activity with holdings** — no recent buys but holding gold → "Consider dollar-cost averaging"
+   - If no rules fire, it returns a neutral "Your trading activity looks balanced" message.
+
+**Why it's mocked**: The architecture is designed for a real LLM, but for an evaluation project, deterministic rules make more sense — they're testable, predictable, and demonstrate the same pipeline without external API dependencies.
+
+**Swapping in a real LLM**: Replace `aurix_llm_adapter:generate_insights/1` with an HTTP call to OpenAI, Anthropic, or any LLM API. The function takes a signals map, returns a list of insight binaries. One function, one contract. The rest of the pipeline — ETL, snapshots, agent service, API handler — stays untouched.
+
+## Authentication
+
+I built a smart login flow that respects multi-tenancy without annoying users:
+
+- **Register** (`POST /auth/register`) — needs `tenant_code`, `email`, `password`
+- **Login** (`POST /auth/login`) — if one tenant matches your email, you're in. If multiple tenants exist, the API returns `tenant_selection_required` and the client re-submits with the chosen one. No guessing.
+- **Sessions** — JWT access + refresh tokens. Refresh tokens rotate on use. Password changes revoke everything — no stale sessions hanging around.
+
+## API Surface
 
 | Area | Endpoints |
 | --- | --- |
@@ -79,15 +110,13 @@ At the OTP level, HTTP is supervised separately from Redis, the rate limiter, th
 | Admin | `GET /admin/tenants`, `POST /admin/tenants/:tenant_id/deactivate`, `POST /admin/gold-price`, `PUT /admin/tenants/:tenant_id/fees`, `POST /admin/etl/trigger` |
 | System | `GET /health`, `GET /swagger`, `GET /swagger/spec` |
 
-Full endpoint writeups live in `docs/api/`, and the machine-readable OpenAPI source is in `priv/swagger/openapi.json`.
+Full writeups in `docs/api/`. Machine-readable spec in `priv/swagger/openapi.json`.
 
-## Sample API Requests and Responses
+## See It Work
 
-The examples below are aligned with the current handlers and service layer. IDs, tokens, and timestamps will vary at runtime.
+IDs, tokens, timestamps — all will vary at runtime. These are the real shapes.
 
-### 1. Register
-
-Request:
+### Register
 
 ```http
 POST /auth/register
@@ -100,8 +129,6 @@ Content-Type: application/json
 }
 ```
 
-Response `201 Created`:
-
 ```json
 {
   "user_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -112,9 +139,9 @@ Response `201 Created`:
 }
 ```
 
-### 2. Login
+### Login (Smart Flow)
 
-Smart login first attempt, without `tenant_code`:
+First attempt — no `tenant_code`:
 
 ```http
 POST /auth/login
@@ -126,7 +153,7 @@ Content-Type: application/json
 }
 ```
 
-Possible response when the same email exists in multiple tenants:
+If the same email lives in multiple tenants, the API asks you to pick:
 
 ```json
 {
@@ -135,17 +162,13 @@ Possible response when the same email exists in multiple tenants:
     "message": "Multiple tenants found. Please select one."
   },
   "tenants": [
-    {
-      "tenant_code": "aurix-demo"
-    },
-    {
-      "tenant_code": "partner-co"
-    }
+    { "tenant_code": "aurix-demo" },
+    { "tenant_code": "partner-co" }
   ]
 }
 ```
 
-Re-submit with the selected tenant:
+Re-submit with your choice:
 
 ```http
 POST /auth/login
@@ -158,8 +181,6 @@ Content-Type: application/json
 }
 ```
 
-Response `200 OK`:
-
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -169,16 +190,12 @@ Response `200 OK`:
 }
 ```
 
-### 3. Wallet
-
-Request:
+### Check Wallet
 
 ```http
 GET /wallet
 Authorization: Bearer <access_token>
 ```
-
-Response `200 OK`:
 
 ```json
 {
@@ -191,9 +208,7 @@ Response `200 OK`:
 }
 ```
 
-### 4. Buy Gold
-
-Request:
+### Buy Gold
 
 ```http
 POST /wallet/buy
@@ -205,8 +220,6 @@ Content-Type: application/json
   "grams": "1.25000000"
 }
 ```
-
-Response `200 OK`:
 
 ```json
 {
@@ -227,16 +240,12 @@ Response `200 OK`:
 }
 ```
 
-### 5. Insights
-
-Request:
+### Get Insights
 
 ```http
 GET /insights?limit=2&frequency=weekly
 Authorization: Bearer <access_token>
 ```
-
-Response `200 OK`:
 
 ```json
 {
@@ -267,7 +276,26 @@ Response `200 OK`:
 }
 ```
 
-## Quick Start With Docker
+## Live Demo
+
+It's running. Go look.
+
+| Resource | URL |
+| --- | --- |
+| Frontend | [https://hopn.ibrahimihsan.site](https://hopn.ibrahimihsan.site) |
+| Backend API | [https://hopn-backend.ibrahimihsan.site](https://hopn-backend.ibrahimihsan.site) |
+| Health Check | [https://hopn-backend.ibrahimihsan.site/health](https://hopn-backend.ibrahimihsan.site/health) |
+| Swagger UI | [https://hopn-backend.ibrahimihsan.site/swagger](https://hopn-backend.ibrahimihsan.site/swagger) |
+| OpenAPI Spec | [https://hopn-backend.ibrahimihsan.site/swagger/spec](https://hopn-backend.ibrahimihsan.site/swagger/spec) |
+
+Demo credentials:
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin | `admin@Aurix.com` | `P@ssw0rd` |
+| User | `user@Aurix.com` | `Password@` |
+
+## Get It Running
 
 ```bash
 git clone https://github.com/aledanee/Aurix.git
@@ -276,20 +304,16 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Local URLs:
+That's it. You'll have:
 
-- Frontend: `http://localhost:3000`
-- Backend API: `http://localhost:8080`
-- Swagger UI: `http://localhost:8080/swagger`
-- OpenAPI endpoint: `http://localhost:8080/swagger/spec`
+- Frontend at `http://localhost:3000`
+- Backend API at `http://localhost:8080`
+- Swagger UI at `http://localhost:8080/swagger`
+- OpenAPI spec at `http://localhost:8080/swagger/spec`
 
-First-use notes:
+Use tenant code `aurix-demo` for registration. There's also `partner-co` seeded — useful for testing tenant isolation and the smart login path. Wallet seed balance comes from `.env.example`, so buy flows work immediately after signup.
 
-- Use tenant code `aurix-demo` for registration.
-- The repository also seeds `partner-co`, which is useful for testing tenant isolation and the smart login tenant-selection path.
-- In local development, wallet seed balance comes from `.env.example`, so the buy flow can be exercised immediately after registration.
-
-Verification commands:
+Quick sanity check:
 
 ```bash
 curl http://localhost:8080/health
@@ -298,42 +322,32 @@ curl http://localhost:8080/swagger/spec
 
 ## Demo Accounts
 
-Two demo accounts are auto-seeded on startup when the `DEMO_*` environment variables are set in `.env`:
+Two accounts auto-seed on startup when the `DEMO_*` env vars are set:
 
 | Role | Email | Password | Tenant |
 | --- | --- | --- | --- |
 | Admin | `admin@Aurix.com` | `P@ssw0rd` | `aurix-demo` |
 | User | `user@Aurix.com` | `Password@` | `aurix-demo` |
 
-These accounts are created automatically when `docker compose up` runs. If the accounts already exist, the seed is idempotent and skips creation.
+Idempotent — if they already exist, the seed skips. Safe to re-run.
 
-### Login via API
-
-Admin login:
+**Via API:**
 
 ```bash
+# Admin
 curl -s http://localhost:8080/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@Aurix.com","password":"P@ssw0rd"}'
-```
 
-User login:
-
-```bash
+# User
 curl -s http://localhost:8080/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"user@Aurix.com","password":"Password@"}'
 ```
 
-### Login via Frontend
+**Via Frontend:** Open `http://localhost:3000`, enter the credentials. Admin gets access to `/admin/*` routes.
 
-1. Open `http://localhost:3000`
-2. Enter email and password from the table above
-3. The admin account has access to admin endpoints under `/admin/*`
-
-### Environment Variables
-
-The demo credentials are configured in `.env`:
+**Environment config** (in `.env`):
 
 ```
 DEMO_ADMIN_EMAIL=admin@Aurix.com
@@ -344,13 +358,11 @@ DEMO_TENANT=aurix-demo
 SEED_BALANCE_EUR_CENTS=1000000
 ```
 
-Each account is seeded with €10,000.00 (1,000,000 cents) fiat balance. To change the starting balance, modify `SEED_BALANCE_EUR_CENTS` in `.env`.
+Each account starts with €10,000.00 (1,000,000 cents). Change `SEED_BALANCE_EUR_CENTS` to adjust. If any `DEMO_*` variable is missing, the seed silently skips — safe for production.
 
-If any `DEMO_*` variable is missing, the seed step is silently skipped — safe for production deployments.
+## Local Development
 
-## Local Development Commands
-
-Backend:
+**Backend:**
 
 ```bash
 rebar3 compile
@@ -358,7 +370,7 @@ rebar3 eunit
 rebar3 ct
 ```
 
-Frontend:
+**Frontend:**
 
 ```bash
 cd frontend
@@ -366,23 +378,35 @@ npm install
 npm start
 ```
 
-## Testing
+## CI/CD
 
-Aurix includes both EUnit and Common Test coverage.
+Every push to `main` triggers the full pipeline:
 
-- EUnit tests cover JWT behavior, auth middleware behavior, and the mocked LLM adapter.
-- Common Test suites cover auth flows, wallet flows, admin routes, privacy routes, and tenant isolation.
+1. EUnit tests in a fresh Erlang container
+2. If green — SSH into the production VPS
+3. Write `.env` from GitHub secrets
+4. Docker Compose rebuild + restart
+5. Health check to confirm it's live
 
-Current test locations:
+Workflow file: `.github/workflows/deploy.yml`.
 
-- `test/aurix_jwt_tests.erl`
-- `test/aurix_auth_middleware_tests.erl`
-- `test/aurix_llm_adapter_tests.erl`
-- `test/ct/auth_SUITE.erl`
-- `test/ct/wallet_SUITE.erl`
-- `test/ct/admin_SUITE.erl`
-- `test/ct/privacy_SUITE.erl`
-- `test/ct/tenant_isolation_SUITE.erl`
+## Tests
+
+Both EUnit and Common Test. I don't ship what I can't verify.
+
+- **EUnit** — JWT behavior, auth middleware, mocked LLM adapter
+- **Common Test** — auth flows, wallet flows, admin routes, privacy routes, tenant isolation
+
+```text
+test/aurix_jwt_tests.erl
+test/aurix_auth_middleware_tests.erl
+test/aurix_llm_adapter_tests.erl
+test/ct/auth_SUITE.erl
+test/ct/wallet_SUITE.erl
+test/ct/admin_SUITE.erl
+test/ct/privacy_SUITE.erl
+test/ct/tenant_isolation_SUITE.erl
+```
 
 ## Project Structure
 
@@ -411,18 +435,18 @@ frontend/                  # React client
 priv/sql/                  # Schema and seed SQL
 ```
 
-## Scaling to Millions of Users
+## Where It Goes From Here
 
-Aurix is still a scoped evaluation project, but its design already points in the right direction for large-scale operation:
+Aurix is a scoped evaluation project, but the architecture doesn't know that. It's already pointing in the right direction:
 
-- API nodes are stateless, so horizontal scaling is straightforward behind a load balancer.
-- Redis already supports rate limiting and response caching, which helps absorb high read traffic and operational bursts.
-- The outbox pattern creates a clean handoff point for Kafka or another event bus without coupling wallet writes to downstream consumers.
-- PostgreSQL can evolve with read replicas for history and insight queries, plus partitioning for large transaction and outbox tables.
-- Trade requests already use idempotency keys, row-level locking, and version checks, which are the right primitives for safe concurrency at scale.
-- Cursor pagination on list endpoints avoids the cost and instability of offset-based pagination on large datasets.
+- **Horizontal scaling** — API nodes are stateless. Put a load balancer in front, spin up more.
+- **Traffic absorption** — Redis rate limiting + response caching are already in place for read-heavy bursts.
+- **Event-driven growth** — The outbox pattern gives you a clean Kafka handoff point without coupling wallet writes to downstream consumers.
+- **Database evolution** — Read replicas for history/insight queries, partitioning for large transaction and outbox tables.
+- **Concurrency safety** — Idempotency keys, row-level locking, version checks. The primitives are already there.
+- **Pagination** — Cursor-based, not offset-based. No performance cliff on large datasets.
 
-## Documentation Links
+## Documentation
 
 - [System Design](docs/SYSTEM_DESIGN.md)
 - [API Design](docs/API_DESIGN.md)
@@ -435,6 +459,6 @@ Aurix is still a scoped evaluation project, but its design already points in the
 - [User Stories](docs/USER_STORIES.md)
 - [OpenAPI Spec](priv/swagger/openapi.json)
 
-## Conclusion
+---
 
-Aurix satisfies the evaluation brief by demonstrating a realistic backend design rather than a minimal prototype. It shows how to build a fintech-style, multi-tenant wallet platform with safe financial storage rules, atomic transaction posting, tenant-aware APIs, AI-assisted insight delivery, Docker-based setup, and test coverage. The current implementation is intentionally practical: the core trade path is reliable, the API surface is documented, and the architecture has clear seams for future scale.
+This isn't a minimal prototype dressed up to pass an evaluation. It's a real backend design — the kind of code I'd stand behind in production. The trade path is reliable, the API surface is documented, the architecture has clean seams for scale, and every design decision was made with intent. Like playing the oud — you don't just hit the notes, you feel where the music wants to go, and you let the structure breathe.
