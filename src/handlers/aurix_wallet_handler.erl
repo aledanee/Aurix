@@ -162,12 +162,15 @@ ensure_decimal(Bin) ->
 
 %% Format wallet map for JSON response
 format_wallet_response(Wallet) ->
+    {ok, GoldPriceCents} = aurix_price_provider:get_price(),
     #{
         <<"wallet_id">> => maps:get(id, Wallet),
         <<"tenant_id">> => maps:get(tenant_id, Wallet),
         <<"user_id">> => maps:get(user_id, Wallet),
         <<"gold_balance_grams">> => format_gold(maps:get(gold_balance_grams, Wallet)),
         <<"fiat_balance_eur">> => format_eur(maps:get(fiat_balance_eur_cents, Wallet)),
+        <<"fiat_balance_eur_cents">> => maps:get(fiat_balance_eur_cents, Wallet),
+        <<"gold_price_eur_cents">> => GoldPriceCents,
         <<"updated_at">> => maps:get(updated_at, Wallet)
     }.
 

@@ -15,7 +15,7 @@ export default function InsightsPage() {
     try {
       const data = await getInsights(cursor, 10);
       setInsights((prev) =>
-        cursor ? [...prev, ...data.snapshots] : data.snapshots
+        cursor ? [...prev, ...data.items] : data.items
       );
       setNextCursor(data.next_cursor || null);
     } catch (err) {

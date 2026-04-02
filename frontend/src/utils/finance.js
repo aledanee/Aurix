@@ -121,3 +121,15 @@ export function isPositiveGoldAmount(grams) {
   const gramsUnits = parseScaledDecimal(grams, DEFAULT_GOLD_SCALE);
   return gramsUnits != null && gramsUnits > 0n;
 }
+
+export function parseEurToCents(eurString) {
+  if (eurString == null) return 0;
+  const text = String(eurString).trim();
+  if (!text) return 0;
+  const negative = text.startsWith('-');
+  const abs = negative ? text.slice(1) : text;
+  const [whole = '0', frac = ''] = abs.split('.');
+  const paddedFrac = (frac + '00').slice(0, 2);
+  const cents = parseInt(whole, 10) * 100 + parseInt(paddedFrac, 10);
+  return negative ? -cents : cents;
+}

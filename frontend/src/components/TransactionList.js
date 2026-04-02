@@ -1,5 +1,5 @@
 import React from 'react';
-import { formatEurCents, formatGoldGrams } from '../utils/finance';
+import { formatEurCents, formatGoldGrams, parseEurToCents } from '../utils/finance';
 
 function formatDate(iso) {
   const d = new Date(iso);
@@ -64,13 +64,13 @@ export default function TransactionList({ transactions }) {
                 <td data-label="Grams">
                   <span className="table__primary">{formatGoldGrams(txn.gold_grams)}</span>
                 </td>
-                <td data-label="Price/gram">{formatEurCents(txn.price_per_gram_cents)}</td>
-                <td data-label="Gross EUR">{formatEurCents(txn.gross_eur_cents)}</td>
+                <td data-label="Price/gram">{formatEurCents(parseEurToCents(txn.price_eur_per_gram))}</td>
+                <td data-label="Gross EUR">{formatEurCents(parseEurToCents(txn.gross_eur))}</td>
                 <td data-label="Fee EUR">
-                  {txn.fee_eur_cents == null ? '-' : formatEurCents(txn.fee_eur_cents)}
+                  {txn.fee_eur == null ? '-' : formatEurCents(parseEurToCents(txn.fee_eur))}
                 </td>
                 <td data-label="Status">
-                  <span className={`badge badge--${txn.status === 'completed' ? 'success' : 'warning'}`}>
+                  <span className={`badge badge--${txn.status === 'posted' || txn.status === 'completed' ? 'success' : 'warning'}`}>
                     {txn.status}
                   </span>
                 </td>

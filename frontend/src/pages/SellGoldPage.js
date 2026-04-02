@@ -29,13 +29,13 @@ export default function SellGoldPage() {
           <div className="page-chip page-chip--accent">
             <span className="page-chip__label">Reference price</span>
             <strong className="page-chip__value">
-              {formatEurCents(wallet.data?.gold_price_cents)}
+              {formatEurCents(wallet.data?.gold_price_eur_cents)}
               <span className="page-chip__suffix">/g</span>
             </strong>
           </div>
           <div className="page-chip">
             <span className="page-chip__label">Gold available</span>
-            <strong className="page-chip__value">{formatGoldGrams(wallet.data?.gold_grams)}</strong>
+            <strong className="page-chip__value">{formatGoldGrams(wallet.data?.gold_balance_grams)}</strong>
           </div>
         </div>
       </div>
@@ -47,7 +47,7 @@ export default function SellGoldPage() {
         <div className="trade-console__main">
           <TradeForm
             type="sell"
-            goldPriceCents={wallet.data?.gold_price_cents}
+            goldPriceCents={wallet.data?.gold_price_eur_cents}
             onSuccess={() => {
               wallet.execute();
               navigate('/transactions');
@@ -69,7 +69,7 @@ export default function SellGoldPage() {
             <div className="detail-list">
               <div className="detail-list__row">
                 <span className="detail-list__label">Gold available</span>
-                <span className="detail-list__value">{formatGoldGrams(wallet.data?.gold_grams)}</span>
+                <span className="detail-list__value">{formatGoldGrams(wallet.data?.gold_balance_grams)}</span>
               </div>
               <div className="detail-list__row">
                 <span className="detail-list__label">EUR after settlement</span>

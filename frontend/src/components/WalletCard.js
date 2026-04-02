@@ -16,7 +16,7 @@ export default function WalletCard({ wallet }) {
             <span className="wallet-card__tag">Asset</span>
           </div>
           <div className="wallet-card__value-row">
-            <div className="wallet-card__value">{formatGoldGrams(wallet.gold_grams)}</div>
+            <div className="wallet-card__value">{formatGoldGrams(wallet.gold_balance_grams)}</div>
             <div className="wallet-card__icon">Au</div>
           </div>
           <div className="wallet-card__foot">
@@ -35,7 +35,7 @@ export default function WalletCard({ wallet }) {
             <span className="wallet-card__tag">Cash</span>
           </div>
           <div className="wallet-card__value-row">
-            <div className="wallet-card__value">{formatEurCents(wallet.eur_balance_cents)}</div>
+            <div className="wallet-card__value">{formatEurCents(wallet.fiat_balance_eur_cents)}</div>
             <div className="wallet-card__icon">EUR</div>
           </div>
           <div className="wallet-card__foot">

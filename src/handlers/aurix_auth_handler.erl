@@ -49,45 +49,52 @@ handle_action(register, Req0) ->
     end;
 
 handle_action(login, Req0) ->
-    {ok, Body, Req1} = cowboy_req:read_body(Req0),
-    RequestId = maps:get(request_id, Req0, undefined),
-    logger:set_process_metadata(#{request_id => RequestId}),
-    case jsx:decode(Body, [return_maps]) of
-        #{<<"email">> := Email, <<"password">> := Password} = Parsed ->
-            TenantCode = maps:get(<<"tenant_code">>, Parsed, undefined),
-            Ip = peer_ip(Req1),
-            RateKey = case TenantCode of
-                undefined -> <<"global">>;
-                TC -> TC
-            end,
-            case aurix_rate_limiter:check_rate(RateKey, <<"anonymous">>, <<"login">>, Ip) of
-                {error, rate_limited, RateInfo} ->
-                    aurix_rate_headers:reply_rate_limited(RateInfo, Req1);
-                {ok, RateInfo} ->
-                    Req2 = aurix_rate_headers:set_headers(RateInfo, Req1),
-                    Result = case TenantCode of
-                        undefined ->
-                            aurix_auth_service:login(Email, Password);
-                        _ ->
-                            aurix_auth_service:login(TenantCode, Email, Password)
-                    end,
-                    case Result of
-                        {ok, Tokens} ->
-                            reply_json(200, Tokens, Req2);
-                        {error, tenant_selection_required, Tenants} ->
-                            reply_json(409, #{
-                                error => #{
-                                    code => <<"tenant_selection_required">>,
-                                    message => <<"Multiple tenants found. Please select one.">>
-                                },
-                                tenants => Tenants
-                            }, Req2);
-                        {error, Reason} ->
-                            reply_service_error(Reason, Req2)
-                    end
-            end;
-        _ ->
-            aurix_auth_middleware:reply_error(400, <<"bad_request">>, <<"Missing required fields: email and password">>, Req1)
+    try
+        {ok, Body, Req1} = cowboy_req:read_body(Req0),
+        RequestId = maps:get(request_id, Req0, undefined),
+        logger:set_process_metadata(#{request_id => RequestId}),
+        case jsx:decode(Body, [return_maps]) of
+            #{<<"email">> := Email, <<"password">> := Password} = Parsed ->
+                TenantCode = maps:get(<<"tenant_code">>, Parsed, undefined),
+                Ip = peer_ip(Req1),
+                RateKey = case TenantCode of
+                    undefined -> <<"global">>;
+                    TC -> TC
+                end,
+                case aurix_rate_limiter:check_rate(RateKey, <<"anonymous">>, <<"login">>, Ip) of
+                    {error, rate_limited, RateInfo} ->
+                        aurix_rate_headers:reply_rate_limited(RateInfo, Req1);
+                    {ok, RateInfo} ->
+                        Req2 = aurix_rate_headers:set_headers(RateInfo, Req1),
+                        Result = case TenantCode of
+                            undefined ->
+                                aurix_auth_service:login(Email, Password);
+                            _ ->
+                                aurix_auth_service:login(TenantCode, Email, Password)
+                        end,
+                        case Result of
+                            {ok, Tokens} ->
+                                reply_json(200, Tokens, Req2);
+                            {error, tenant_selection_required, Tenants} ->
+                                reply_json(409, #{
+                                    error => #{
+                                        code => <<"tenant_selection_required">>,
+                                        message => <<"Multiple tenants found. Please select one.">>
+                                    },
+                                    tenants => Tenants
+                                }, Req2);
+                            {error, Reason} ->
+                                reply_service_error(Reason, Req2)
+                        end
+                end;
+            _ ->
+                aurix_auth_middleware:reply_error(400, <<"bad_request">>, <<"Missing required fields: email and password">>, Req1)
+        end
+    catch
+        CrashClass:CrashReason:CrashStack ->
+            logger:error(#{action => <<"auth.login.crash">>, class => CrashClass, reason => CrashReason, stacktrace => CrashStack}),
+            ErrMsg = iolist_to_binary(io_lib:format("~p:~p", [CrashClass, CrashReason])),
+            reply_json(500, #{error => <<"internal_error">>, debug => ErrMsg}, Req0)
     end;
 
 handle_action(refresh, Req0) ->

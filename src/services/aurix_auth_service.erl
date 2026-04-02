@@ -36,7 +36,21 @@ register(TenantCode, Email, Password) ->
                     case Result of
                         {ok, Data} ->
                             logger:info(#{action => <<"auth.register">>, tenant_id => TenantId, email => mask_email(Email)}),
-                            {ok, Data};
+                            UserId2 = maps:get(user_id, Data),
+                            Email2 = maps:get(email, Data),
+                            TenantId2 = maps:get(tenant_id, Data),
+                            Role = <<"user">>,
+                            {ok, AccessToken} = aurix_jwt:sign_access_token(UserId2, TenantId2, Email2, Role),
+                            {ok, RefreshToken, RefreshHash} = generate_refresh_token(),
+                            RefreshId = generate_uuid(),
+                            ExpiresAt = refresh_expiry_timestamp(),
+                            ok = aurix_repo_refresh_token:create(RefreshId, TenantId2, UserId2, RefreshHash, ExpiresAt),
+                            {ok, Data#{
+                                access_token => AccessToken,
+                                refresh_token => RefreshToken,
+                                token_type => <<"Bearer">>,
+                                expires_in => application:get_env(aurix, jwt_access_ttl_sec, 900)
+                            }};
                         Error -> Error
                     end;
                 {error, Reason} ->
@@ -301,7 +315,10 @@ hash_password(Password) when is_binary(Password) ->
 verify_password(Password, StoredHash) when is_binary(Password), is_binary(StoredHash) ->
     case StoredHash of
         <<"$2", _/binary>> ->
-            {ok, StoredHash} =:= bcrypt:hashpw(binary_to_list(Password), binary_to_list(StoredHash));
+            case bcrypt:hashpw(binary_to_list(Password), binary_to_list(StoredHash)) of
+                {ok, Hash} -> list_to_binary(Hash) =:= StoredHash;
+                _ -> false
+            end;
         _ ->
             false
     end.
@@ -320,13 +337,11 @@ generate_refresh_token() ->
 hash_refresh_token(Token) ->
     base64:encode(crypto:hash(sha256, Token)).
 
-%% Compute refresh token expiry as an ISO 8601 timestamp
+%% Compute refresh token expiry as an Erlang datetime tuple for epgsql timestamptz
 refresh_expiry_timestamp() ->
     TTL = application:get_env(aurix, jwt_refresh_ttl_sec, 604800),
     ExpiresUnix = erlang:system_time(second) + TTL,
-    {{Y, Mo, D}, {H, Mi, S}} = calendar:system_time_to_universal_time(ExpiresUnix, second),
-    iolist_to_binary(io_lib:format("~4..0B-~2..0B-~2..0BT~2..0B:~2..0B:~2..0BZ",
-                                    [Y, Mo, D, H, Mi, S])).
+    calendar:system_time_to_universal_time(ExpiresUnix, second).
 
 %% Generate a UUID v4 as binary string
 generate_uuid() ->

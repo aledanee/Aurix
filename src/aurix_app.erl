@@ -11,6 +11,7 @@
 start(_StartType, _StartArgs) ->
     ok = apply_env_overrides(),
     ok = setup_database(),
+    seed_demo_users(),
     aurix_sup:start_link().
 
 stop(_State) ->
@@ -146,13 +147,101 @@ setup_database() ->
     Database = proplists:get_value(database, DbConfig, "aurix_dev"),
     Username = proplists:get_value(username, DbConfig, "aurix"),
     Password = proplists:get_value(password, DbConfig, "aurix_dev_pass"),
-    pgapp:connect([
+    {ok, _} = pgapp:connect([
         {host, Host},
         {port, Port},
         {database, Database},
         {username, Username},
         {password, Password},
         {size, 10}
-    ]).
+    ]),
+    ok.
+
+seed_demo_users() ->
+    try
+        AdminEmail = os:getenv("DEMO_ADMIN_EMAIL"),
+        AdminPass  = os:getenv("DEMO_ADMIN_PASSWORD"),
+        UserEmail  = os:getenv("DEMO_USER_EMAIL"),
+        UserPass   = os:getenv("DEMO_USER_PASSWORD"),
+        TenantCode = os:getenv("DEMO_TENANT"),
+        BalanceStr = os:getenv("SEED_BALANCE_EUR_CENTS"),
+        case {AdminEmail, AdminPass, UserEmail, UserPass, TenantCode} of
+            {false, _, _, _, _} -> skip_seed();
+            {_, false, _, _, _} -> skip_seed();
+            {_, _, false, _, _} -> skip_seed();
+            {_, _, _, false, _} -> skip_seed();
+            {_, _, _, _, false} -> skip_seed();
+            _ ->
+                AdminEmailBin = list_to_binary(AdminEmail),
+                AdminPassBin  = list_to_binary(AdminPass),
+                UserEmailBin  = list_to_binary(UserEmail),
+                UserPassBin   = list_to_binary(UserPass),
+                TenantCodeBin = list_to_binary(TenantCode),
+                BalanceEurCents = case BalanceStr of
+                    false -> 1000000;
+                    _     -> list_to_integer(BalanceStr)
+                end,
+                case pgapp:equery("SELECT id FROM tenants WHERE code = $1 AND status = 'active'", [TenantCodeBin]) of
+                    {ok, _, [{TenantId}]} ->
+                        seed_user(TenantId, AdminEmailBin, AdminPassBin, BalanceEurCents, admin),
+                        seed_user(TenantId, UserEmailBin, UserPassBin, BalanceEurCents, user),
+                        logger:info(#{action => <<"app.seed_demo_users">>, admin_email => AdminEmailBin, user_email => UserEmailBin});
+                    _ ->
+                        logger:warning(#{action => <<"app.seed_demo_users">>, result => <<"tenant_not_found">>, tenant_code => TenantCodeBin})
+                end
+        end,
+        ok
+    catch
+        Class:Reason:Stack ->
+            logger:warning(#{action => <<"app.seed_demo_users">>, error => Reason, class => Class, stacktrace => Stack}),
+            ok
+    end.
+
+skip_seed() ->
+    logger:info(#{action => <<"app.seed_demo_users">>, result => <<"skipped_no_env">>}).
+
+seed_user(TenantId, Email, Password, BalanceEurCents, Role) ->
+    {ok, Salt} = bcrypt:gen_salt(12),
+    {ok, Hash} = bcrypt:hashpw(binary_to_list(Password), Salt),
+    PasswordHash = list_to_binary(Hash),
+    NewUserId = uuid:uuid_to_string(uuid:get_v4_urandom(), binary_standard),
+    UserId = case pgapp:equery(
+        "INSERT INTO users (id, tenant_id, email, password_hash, status, created_at) "
+        "VALUES ($1, $2, $3, $4, 'active', now()) "
+        "ON CONFLICT (tenant_id, email) DO NOTHING "
+        "RETURNING id",
+        [NewUserId, TenantId, Email, PasswordHash]
+    ) of
+        {ok, 1, _, [{Id}]} -> Id;
+        {ok, 0, _, []} ->
+            %% User already exists, look up their ID
+            case pgapp:equery(
+                "SELECT id FROM users WHERE tenant_id = $1 AND email = $2 AND deleted_at IS NULL",
+                [TenantId, Email]
+            ) of
+                {ok, _, [{ExistingId}]} -> ExistingId;
+                _ -> NewUserId
+            end;
+        _ -> NewUserId
+    end,
+    %% Always attempt wallet creation (idempotent)
+    WalletId = uuid:uuid_to_string(uuid:get_v4_urandom(), binary_standard),
+    pgapp:equery(
+        "INSERT INTO wallets (id, tenant_id, user_id, fiat_balance_eur_cents, gold_balance_grams, version, created_at, updated_at) "
+        "VALUES ($1, $2, $3, $4, 0, 1, now(), now()) "
+        "ON CONFLICT (tenant_id, user_id) DO NOTHING",
+        [WalletId, TenantId, UserId, BalanceEurCents]
+    ),
+    %% Always attempt role update
+    case Role of
+        admin ->
+            pgapp:equery(
+                "UPDATE users SET role = 'admin' WHERE tenant_id = $1 AND email = $2 AND deleted_at IS NULL",
+                [TenantId, Email]
+            );
+        _ ->
+            ok
+    end,
+    ok.
 
 

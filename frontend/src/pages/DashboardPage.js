@@ -9,7 +9,7 @@ import { formatEurCents, formatGoldGrams } from '../utils/finance';
 export default function DashboardPage() {
   const wallet = useApi(getWallet);
   const txns = useApi(getTransactions);
-  const recentCount = txns.data?.transactions?.length || 0;
+  const recentCount = txns.data?.items?.length || 0;
 
   useEffect(() => {
     wallet.execute();
@@ -28,11 +28,11 @@ export default function DashboardPage() {
         </div>
 
         <div className="page-chip-group">
-          {wallet.data?.gold_price_cents != null && (
+          {wallet.data?.gold_price_eur_cents != null && (
             <div className="page-chip page-chip--accent">
               <span className="page-chip__label">Live gold price</span>
               <strong className="page-chip__value">
-                {formatEurCents(wallet.data.gold_price_cents)}
+                {formatEurCents(wallet.data.gold_price_eur_cents)}
                 <span className="page-chip__suffix">/g</span>
               </strong>
             </div>
@@ -78,12 +78,12 @@ export default function DashboardPage() {
           <div className="detail-list">
             <div className="detail-list__row">
               <span className="detail-list__label">Gold on hand</span>
-              <span className="detail-list__value">{formatGoldGrams(wallet.data?.gold_grams)}</span>
+              <span className="detail-list__value">{formatGoldGrams(wallet.data?.gold_balance_grams)}</span>
             </div>
             <div className="detail-list__row">
               <span className="detail-list__label">EUR available</span>
               <span className="detail-list__value">
-                {formatEurCents(wallet.data?.eur_balance_cents)}
+                {formatEurCents(wallet.data?.fiat_balance_eur_cents)}
               </span>
             </div>
           </div>
@@ -102,7 +102,7 @@ export default function DashboardPage() {
         </div>
         {txns.error && <div className="alert alert--error">{txns.error}</div>}
         {txns.loading && <div className="spinner" />}
-        <TransactionList transactions={txns.data?.transactions} />
+        <TransactionList transactions={txns.data?.items} />
       </div>
     </div>
   );

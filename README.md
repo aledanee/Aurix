@@ -296,6 +296,58 @@ curl http://localhost:8080/health
 curl http://localhost:8080/swagger/spec
 ```
 
+## Demo Accounts
+
+Two demo accounts are auto-seeded on startup when the `DEMO_*` environment variables are set in `.env`:
+
+| Role | Email | Password | Tenant |
+| --- | --- | --- | --- |
+| Admin | `admin@Aurix.com` | `P@ssw0rd` | `aurix-demo` |
+| User | `user@Aurix.com` | `Password@` | `aurix-demo` |
+
+These accounts are created automatically when `docker compose up` runs. If the accounts already exist, the seed is idempotent and skips creation.
+
+### Login via API
+
+Admin login:
+
+```bash
+curl -s http://localhost:8080/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@Aurix.com","password":"P@ssw0rd"}'
+```
+
+User login:
+
+```bash
+curl -s http://localhost:8080/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@Aurix.com","password":"Password@"}'
+```
+
+### Login via Frontend
+
+1. Open `http://localhost:3000`
+2. Enter email and password from the table above
+3. The admin account has access to admin endpoints under `/admin/*`
+
+### Environment Variables
+
+The demo credentials are configured in `.env`:
+
+```
+DEMO_ADMIN_EMAIL=admin@Aurix.com
+DEMO_ADMIN_PASSWORD=P@ssw0rd
+DEMO_USER_EMAIL=user@Aurix.com
+DEMO_USER_PASSWORD=Password@
+DEMO_TENANT=aurix-demo
+SEED_BALANCE_EUR_CENTS=1000000
+```
+
+Each account is seeded with €10,000.00 (1,000,000 cents) fiat balance. To change the starting balance, modify `SEED_BALANCE_EUR_CENTS` in `.env`.
+
+If any `DEMO_*` variable is missing, the seed step is silently skipped — safe for production deployments.
+
 ## Local Development Commands
 
 Backend:

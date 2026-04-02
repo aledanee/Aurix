@@ -43,16 +43,23 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       PORT: 8080
       GOLD_PRICE_EUR: ${GOLD_PRICE_EUR:-65.00}
+      SEED_BALANCE_EUR_CENTS: ${SEED_BALANCE_EUR_CENTS:-1000000}
+      DEMO_ADMIN_EMAIL: ${DEMO_ADMIN_EMAIL:-}
+      DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:-}
+      DEMO_USER_EMAIL: ${DEMO_USER_EMAIL:-}
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-}
+      DEMO_TENANT: ${DEMO_TENANT:-aurix-demo}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
-      interval: 30s
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 10s
       timeout: 5s
-      retries: 3
+      start_period: 30s
+      retries: 5
 
   frontend:
     build:

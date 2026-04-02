@@ -15,7 +15,7 @@ export default function TransactionsPage() {
     try {
       const data = await getTransactions(cursor, 20);
       setTransactions((prev) =>
-        cursor ? [...prev, ...data.transactions] : data.transactions
+        cursor ? [...prev, ...data.items] : data.items
       );
       setNextCursor(data.next_cursor || null);
     } catch (err) {
