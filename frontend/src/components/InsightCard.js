@@ -15,7 +15,7 @@ export default function InsightCard({ insight }) {
       <div className="insight-card__header">
         <div>
           <span className="insight-card__eyebrow">Insight snapshot</span>
-          <span className="insight-card__period">{insight.period}</span>
+          <span className="insight-card__period">{insight.period_start} — {insight.period_end}</span>
         </div>
         <span className="badge badge--info">{insight.frequency}</span>
       </div>
@@ -54,9 +54,9 @@ export default function InsightCard({ insight }) {
           </ul>
         </div>
       )}
-      {insight.created_at && (
+      {insight.generated_at && (
         <div className="insight-card__date text-muted">
-          Updated {new Date(insight.created_at).toLocaleString()}
+          Updated {new Date(insight.generated_at).toLocaleString()}
         </div>
       )}
     </div>
