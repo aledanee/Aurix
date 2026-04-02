@@ -1,0 +1,23 @@
+{application, aurix, [
+    {description, "Multi-tenant fintech backend for digital gold trading"},
+    {vsn, "0.1.0"},
+    {registered, [aurix_sup]},
+    {mod, {aurix_app, []}},
+    {applications, [
+        kernel,
+        stdlib,
+        sasl,
+        crypto,
+        ssl,
+        inets,
+        cowboy,
+        jsx,
+        epgsql,
+        eredis,
+        jose
+    ]},
+    {env, []},
+    {modules, []},
+    {licenses, ["Proprietary"]},
+    {links, [{"GitHub", "https://github.com/aledanee/Aurix"}]}
+]}.

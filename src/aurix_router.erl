@@ -1,0 +1,47 @@
+-module(aurix_router).
+
+-export([dispatch/0]).
+
+%%====================================================================
+%% API
+%%====================================================================
+
+-spec dispatch() -> cowboy_router:dispatch_rules().
+dispatch() ->
+    cowboy_router:compile([
+        {'_', routes()}
+    ]).
+
+%%====================================================================
+%% internal
+%%====================================================================
+
+routes() ->
+    [
+        %% Health
+        {"/health", aurix_health_handler, #{}},
+
+        %% Auth (public)
+        {"/auth/register", aurix_auth_handler, #{action => register}},
+        {"/auth/login", aurix_auth_handler, #{action => login}},
+        {"/auth/refresh", aurix_auth_handler, #{action => refresh}},
+
+        %% Auth (protected)
+        {"/auth/logout", aurix_auth_handler, #{action => logout}},
+        {"/auth/change-password", aurix_auth_handler, #{action => change_password}},
+
+        %% Wallet (protected)
+        {"/wallet", aurix_wallet_handler, #{action => view}},
+        {"/wallet/buy", aurix_wallet_handler, #{action => buy}},
+        {"/wallet/sell", aurix_wallet_handler, #{action => sell}},
+
+        %% Transactions (protected)
+        {"/transactions", aurix_transaction_handler, #{}},
+
+        %% Insights (protected)
+        {"/insights", aurix_insight_handler, #{}},
+
+        %% Privacy (protected)
+        {"/privacy/export", aurix_privacy_handler, #{action => export}},
+        {"/privacy/erasure-request", aurix_privacy_handler, #{action => erasure}}
+    ].

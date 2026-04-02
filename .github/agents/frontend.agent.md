@@ -48,7 +48,6 @@ Key requirements:
 - Send `Idempotency-Key` header on write operations
 - Handle 401 by attempting token refresh before failing
 - All request/response bodies are JSON
-```
 
 ## Display Formatting
 
