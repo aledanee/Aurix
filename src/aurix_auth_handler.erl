@@ -22,6 +22,8 @@ init(Req0, #{action := Action} = State) ->
 
 handle_action(register, Req0) ->
     {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    RequestId = maps:get(request_id, Req0, undefined),
+    logger:set_process_metadata(#{request_id => RequestId}),
     case jsx:decode(Body, [return_maps]) of
         #{<<"tenant_code">> := TenantCode, <<"email">> := Email, <<"password">> := Password} ->
             Ip = peer_ip(Req1),
@@ -48,6 +50,8 @@ handle_action(register, Req0) ->
 
 handle_action(login, Req0) ->
     {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    RequestId = maps:get(request_id, Req0, undefined),
+    logger:set_process_metadata(#{request_id => RequestId}),
     case jsx:decode(Body, [return_maps]) of
         #{<<"tenant_code">> := TenantCode, <<"email">> := Email, <<"password">> := Password} ->
             Ip = peer_ip(Req1),
@@ -69,6 +73,8 @@ handle_action(login, Req0) ->
 
 handle_action(refresh, Req0) ->
     {ok, Body, Req1} = cowboy_req:read_body(Req0),
+    RequestId = maps:get(request_id, Req0, undefined),
+    logger:set_process_metadata(#{request_id => RequestId}),
     case jsx:decode(Body, [return_maps]) of
         #{<<"refresh_token">> := RefreshToken} ->
             case aurix_auth_service:refresh(RefreshToken) of
@@ -83,7 +89,11 @@ handle_action(refresh, Req0) ->
 
 handle_action(logout, Req0) ->
     case aurix_auth_middleware:authenticate(Req0) of
-        {ok, _Claims} ->
+        {ok, Claims} ->
+            TenantId = maps:get(<<"tenant_id">>, Claims),
+            UserId = maps:get(<<"sub">>, Claims),
+            RequestId = maps:get(request_id, Req0, undefined),
+            logger:set_process_metadata(#{request_id => RequestId, tenant_id => TenantId, user_id => UserId}),
             {ok, Body, Req1} = cowboy_req:read_body(Req0),
             case jsx:decode(Body, [return_maps]) of
                 #{<<"refresh_token">> := RefreshToken} ->
@@ -105,6 +115,8 @@ handle_action(change_password, Req0) ->
         {ok, Claims} ->
             TenantId = maps:get(<<"tenant_id">>, Claims),
             UserId = maps:get(<<"sub">>, Claims),
+            RequestId = maps:get(request_id, Req0, undefined),
+            logger:set_process_metadata(#{request_id => RequestId, tenant_id => TenantId, user_id => UserId}),
             case aurix_rate_limiter:check_rate(TenantId, UserId, <<"change_password">>) of
                 {error, rate_limited, RateInfo} ->
                     aurix_rate_headers:reply_rate_limited(RateInfo, Req0);

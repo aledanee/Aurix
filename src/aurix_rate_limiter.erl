@@ -80,7 +80,9 @@ check_single_key(Key, Limit) ->
             end,
             RateInfo = #{limit => Limit, remaining => max(0, Limit - Count), reset => Reset},
             case Count > Limit of
-                true -> {error, rate_limited, RateInfo};
+                true ->
+                    logger:warning(#{action => <<"rate_limit.exceeded">>, key => Key, count => Count, limit => Limit}),
+                    {error, rate_limited, RateInfo};
                 false -> {ok, RateInfo}
             end;
         {error, _} ->

@@ -18,7 +18,7 @@ register(TenantCode, Email, Password) ->
                     PasswordHash = hash_password(Password),
                     UserId = generate_uuid(),
                     WalletId = generate_uuid(),
-                    aurix_db:transaction(fun(Conn) ->
+                    Result = aurix_db:transaction(fun(Conn) ->
                         case aurix_repo_user:create(Conn, TenantId, Email, PasswordHash, UserId) of
                             {ok, UserId} ->
                                 {ok, _} = aurix_repo_wallet:create(Conn, TenantId, UserId, WalletId),
@@ -32,7 +32,13 @@ register(TenantCode, Email, Password) ->
                             {error, email_taken} ->
                                 {error, email_taken}
                         end
-                    end);
+                    end),
+                    case Result of
+                        {ok, Data} ->
+                            logger:info(#{action => <<"auth.register">>, tenant_id => TenantId, email => mask_email(Email)}),
+                            {ok, Data};
+                        Error -> Error
+                    end;
                 {error, Reason} ->
                     {error, Reason}
             end;
@@ -62,6 +68,7 @@ login(TenantCode, Email, Password) ->
                                     RefreshId = generate_uuid(),
                                     ExpiresAt = refresh_expiry_timestamp(),
                                     ok = aurix_repo_refresh_token:create(RefreshId, TenantId, UserId, RefreshHash, ExpiresAt),
+                                    logger:info(#{action => <<"auth.login">>, tenant_id => TenantId, user_id => UserId, email => mask_email(Email), result => <<"success">>}),
                                     {ok, #{
                                         access_token => AccessToken,
                                         refresh_token => RefreshToken,
@@ -69,14 +76,17 @@ login(TenantCode, Email, Password) ->
                                         expires_in => application:get_env(aurix, jwt_access_ttl_sec, 900)
                                     }};
                                 _ ->
+                                    logger:warning(#{action => <<"auth.login">>, tenant_id => TenantId, email => mask_email(Email), result => <<"account_disabled">>}),
                                     {error, account_disabled}
                             end;
                         false ->
+                            logger:info(#{action => <<"auth.login">>, tenant_id => TenantId, email => mask_email(Email), result => <<"failed">>}),
                             {error, invalid_credentials}
                     end;
                 {error, not_found} ->
                     %% Hash a dummy password to prevent timing attacks
                     _ = hash_password(<<"dummy_password_for_timing">>),
+                    logger:info(#{action => <<"auth.login">>, tenant_id => TenantId, email => mask_email(Email), result => <<"failed">>}),
                     {error, invalid_credentials}
             end;
         {error, Reason} ->
@@ -104,6 +114,7 @@ refresh(RefreshToken) ->
                             NewRefreshId = generate_uuid(),
                             ExpiresAt = refresh_expiry_timestamp(),
                             ok = aurix_repo_refresh_token:create(NewRefreshId, TenantId, UserId, NewHash, ExpiresAt),
+                            logger:info(#{action => <<"auth.refresh">>, tenant_id => TenantId, user_id => UserId}),
                             {ok, #{
                                 access_token => AccessToken,
                                 refresh_token => NewRefresh,
@@ -111,9 +122,11 @@ refresh(RefreshToken) ->
                                 expires_in => application:get_env(aurix, jwt_access_ttl_sec, 900)
                             }};
                         _ ->
+                            logger:info(#{action => <<"auth.refresh">>, result => <<"failed">>, reason => <<"account_disabled">>}),
                             {error, account_disabled}
                     end;
                 {error, not_found} ->
+                    logger:info(#{action => <<"auth.refresh">>, result => <<"failed">>, reason => <<"unauthorized">>}),
                     {error, unauthorized}
             end;
         {error, not_found} ->
@@ -121,10 +134,15 @@ refresh(RefreshToken) ->
             case aurix_repo_refresh_token:get_by_hash_any(Hash) of
                 {ok, Record} ->
                     case maps:get(revoked_at, Record) of
-                        V when V =/= null, V =/= undefined -> {error, token_revoked};
-                        _ -> {error, token_expired}
+                        V when V =/= null, V =/= undefined ->
+                            logger:info(#{action => <<"auth.refresh">>, result => <<"failed">>, reason => <<"token_revoked">>}),
+                            {error, token_revoked};
+                        _ ->
+                            logger:info(#{action => <<"auth.refresh">>, result => <<"failed">>, reason => <<"token_expired">>}),
+                            {error, token_expired}
                     end;
                 {error, not_found} ->
+                    logger:info(#{action => <<"auth.refresh">>, result => <<"failed">>, reason => <<"unauthorized">>}),
                     {error, unauthorized}
             end
     end.
@@ -161,6 +179,7 @@ change_password(TenantId, UserId, CurrentPassword, NewPassword) ->
                                     ok = aurix_repo_user:update_password_hash(TenantId, UserId, NewHash),
                                     ok = aurix_repo_refresh_token:revoke_all_for_user(TenantId, UserId),
                                     ok = aurix_jwt_blacklist:blacklist_user(UserId),
+                                    logger:info(#{action => <<"auth.change_password">>, tenant_id => TenantId, user_id => UserId}),
                                     ok
                             end;
                         {error, Reason} ->
@@ -249,3 +268,12 @@ iso8601_now() ->
     {{Y, Mo, D}, {H, Mi, S}} = calendar:universal_time(),
     iolist_to_binary(io_lib:format("~4..0B-~2..0B-~2..0BT~2..0B:~2..0B:~2..0BZ",
                                     [Y, Mo, D, H, Mi, S])).
+
+mask_email(Email) when is_binary(Email) ->
+    case binary:split(Email, <<"@">>) of
+        [Local, Domain] when byte_size(Local) > 1 ->
+            <<First:1/binary, _/binary>> = Local,
+            <<First/binary, "***@", Domain/binary>>;
+        _ ->
+            <<"***">>
+    end.

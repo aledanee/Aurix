@@ -5,6 +5,10 @@
 init(Req0, #{action := Action} = State) ->
     case aurix_auth_middleware:authenticate(Req0) of
         {ok, Claims} ->
+            TenantId = maps:get(<<"tenant_id">>, Claims),
+            UserId = maps:get(<<"sub">>, Claims),
+            RequestId = maps:get(request_id, Req0, undefined),
+            logger:set_process_metadata(#{request_id => RequestId, tenant_id => TenantId, user_id => UserId}),
             Req = handle_action(Action, Claims, Req0),
             {ok, Req, State};
         {error, Reason} ->

@@ -9,6 +9,8 @@ init(Req0, State) ->
                 {ok, Claims} ->
                     TenantId = maps:get(<<"tenant_id">>, Claims),
                     UserId = maps:get(<<"sub">>, Claims),
+                    RequestId = maps:get(request_id, Req0, undefined),
+                    logger:set_process_metadata(#{request_id => RequestId, tenant_id => TenantId, user_id => UserId}),
                     case aurix_rate_limiter:check_rate(TenantId, UserId, <<"insights">>) of
                         {error, rate_limited, RateInfo} ->
                             Req = aurix_rate_headers:reply_rate_limited(RateInfo, Req0),

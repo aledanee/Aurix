@@ -59,7 +59,7 @@ execute_buy(TenantId, UserId, Grams, IdempotencyKey) ->
             %% Format price as precise decimal string for PostgreSQL numeric(24,8)
             PricePerGram = format_price_decimal(PriceCents),
 
-            aurix_db:transaction(fun(Conn) ->
+            Result = aurix_db:transaction(fun(Conn) ->
                 case lock_wallet(Conn, TenantId, UserId) of
                     {error, _} = Err ->
                         Err;
@@ -100,7 +100,13 @@ execute_buy(TenantId, UserId, Grams, IdempotencyKey) ->
                                 }}
                         end
                 end
-            end)
+            end),
+            case Result of
+                {ok, Data} ->
+                    logger:info(#{action => <<"wallet.buy">>, tenant_id => TenantId, user_id => UserId, transaction_id => TxnId, gold_grams => Grams}),
+                    {ok, Data};
+                Error -> Error
+            end
     end.
 
 %%====================================================================
@@ -126,7 +132,7 @@ execute_sell(TenantId, UserId, Grams, IdempotencyKey) ->
             %% Format price as precise decimal string for PostgreSQL numeric(24,8)
             PricePerGram = format_price_decimal(PriceCents),
 
-            aurix_db:transaction(fun(Conn) ->
+            Result = aurix_db:transaction(fun(Conn) ->
                 case lock_wallet(Conn, TenantId, UserId) of
                     {error, _} = Err ->
                         Err;
@@ -170,7 +176,13 @@ execute_sell(TenantId, UserId, Grams, IdempotencyKey) ->
                                 }}
                         end
                 end
-            end)
+            end),
+            case Result of
+                {ok, Data} ->
+                    logger:info(#{action => <<"wallet.sell">>, tenant_id => TenantId, user_id => UserId, transaction_id => TxnId, gold_grams => Grams}),
+                    {ok, Data};
+                Error -> Error
+            end
     end.
 
 %%====================================================================
