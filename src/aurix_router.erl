@@ -47,5 +47,10 @@ routes() ->
 
         %% Privacy (protected)
         {"/privacy/export", aurix_privacy_handler, #{action => export}},
-        {"/privacy/erasure-request", aurix_privacy_handler, #{action => erasure}}
+        {"/privacy/erasure-request", aurix_privacy_handler, #{action => erasure}},
+
+        %% Admin (protected, role=admin)
+        {"/admin/tenants", aurix_admin_handler, #{action => list_tenants}},
+        {"/admin/tenants/:tenant_id/deactivate", aurix_admin_handler, #{action => deactivate_tenant}},
+        {"/admin/gold-price", aurix_admin_handler, #{action => update_gold_price}}
     ].

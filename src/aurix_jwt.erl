@@ -1,15 +1,21 @@
 -module(aurix_jwt).
 
--export([sign_access_token/3, verify_token/1, get_secret/0]).
+-export([sign_access_token/3, sign_access_token/4, verify_token/1, get_secret/0]).
 
 %%====================================================================
 %% API
 %%====================================================================
 
-%% Signs an access token with sub, tenant_id, email claims.
+%% Signs an access token with sub, tenant_id, email claims (backward-compatible, defaults role to <<"user">>).
 -spec sign_access_token(UserId :: binary(), TenantId :: binary(), Email :: binary()) ->
     {ok, Token :: binary()}.
 sign_access_token(UserId, TenantId, Email) ->
+    sign_access_token(UserId, TenantId, Email, <<"user">>).
+
+%% Signs an access token with sub, tenant_id, email, role claims.
+-spec sign_access_token(UserId :: binary(), TenantId :: binary(), Email :: binary(), Role :: binary()) ->
+    {ok, Token :: binary()}.
+sign_access_token(UserId, TenantId, Email, Role) ->
     Secret = get_secret(),
     TTL = application:get_env(aurix, jwt_access_ttl_sec, 900),
     Now = erlang:system_time(second),
@@ -17,6 +23,7 @@ sign_access_token(UserId, TenantId, Email) ->
         <<"sub">> => UserId,
         <<"tenant_id">> => TenantId,
         <<"email">> => Email,
+        <<"role">> => Role,
         <<"iat">> => Now,
         <<"exp">> => Now + TTL
     },

@@ -6,6 +6,33 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+**Structured Logging & Audit Trail**
+- Custom JSON log formatter (`aurix_log_formatter`) for structured log output
+- Logger process metadata propagation (`request_id`, `tenant_id`, `user_id`) in all authenticated handlers
+- Audit logging in `aurix_auth_service`: register, login (success/failure/disabled), refresh, change_password events
+- Audit logging in `aurix_wallet_service`: buy and sell operations with transaction_id and gold_grams
+- Rate limit exceeded warnings in `aurix_rate_limiter`
+- Email masking helper (`mask_email/1`) for PII protection in logs
+- Kernel logger configuration in `sys.config` pointing to custom formatter
+
+**Admin API Endpoints (US-4.2, US-4.3, US-4.5)**
+- `GET /admin/tenants` — List all tenants (admin-only)
+- `POST /admin/tenants/:tenant_id/deactivate` — Deactivate a tenant (admin-only)
+- `POST /admin/gold-price` — Update gold price per gram (admin-only)
+- `aurix_admin_handler` with JWT authentication and `role=admin` authorization
+- `aurix_admin_service` service layer for all admin operations
+- Role-based authorization: `role` column on users table (migration 011), `role` claim in JWT tokens
+- `set_price/1` API on `aurix_price_provider` gen_server for runtime price updates
+- OpenAPI spec updated with all 3 admin endpoints and ForbiddenError schema
+
+### Changed
+- `aurix_jwt:sign_access_token/4` now accepts `Role` parameter; `/3` arity kept for backward compatibility
+- `aurix_repo_user` functions (`get_by_email/2`, `get_by_id/2`, `user_row_to_map/1`) now include `role` field
+- `aurix_repo_tenant` extended with `list_all/0` and `update_status/2`
+- `aurix_auth_service` login and refresh flows propagate user role to JWT claims
+
 ## [0.1.0] - 2026-04-02
 
 ### Added

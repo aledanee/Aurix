@@ -1,7 +1,7 @@
 -module(aurix_price_provider).
 -behaviour(gen_server).
 
--export([start_link/0, get_price/0]).
+-export([start_link/0, get_price/0, set_price/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -record(state, {
@@ -20,6 +20,10 @@ start_link() ->
 get_price() ->
     gen_server:call(?MODULE, get_price).
 
+-spec set_price(PriceEurCents :: integer()) -> ok.
+set_price(PriceEurCents) ->
+    gen_server:call(?MODULE, {set_price, PriceEurCents}).
+
 %%====================================================================
 %% gen_server callbacks
 %%====================================================================
@@ -33,6 +37,9 @@ init([]) ->
 
 handle_call(get_price, _From, #state{price_eur_cents = PriceCents} = State) ->
     {reply, {ok, PriceCents}, State};
+handle_call({set_price, PriceCents}, _From, State) ->
+    cache_price(PriceCents),
+    {reply, ok, State#state{price_eur_cents = PriceCents}};
 handle_call(_Request, _From, State) ->
     {reply, {error, unknown_request}, State}.
 

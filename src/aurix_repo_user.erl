@@ -36,7 +36,7 @@ create(Conn, TenantId, Email, PasswordHash, UserId) ->
 %% Finds an active user by email within a tenant.
 -spec get_by_email(TenantId :: binary(), Email :: binary()) -> {ok, map()} | {error, not_found}.
 get_by_email(TenantId, Email) ->
-    SQL = "SELECT id, tenant_id, email, password_hash, status, created_at "
+    SQL = "SELECT id, tenant_id, email, password_hash, status, created_at, role "
           "FROM users WHERE tenant_id = $1 AND email = $2 AND deleted_at IS NULL",
     case pgapp:equery(SQL, [TenantId, Email]) of
         {ok, _Cols, [Row]} ->
@@ -48,7 +48,7 @@ get_by_email(TenantId, Email) ->
 %% Finds a user by ID within a tenant.
 -spec get_by_id(TenantId :: binary(), UserId :: binary()) -> {ok, map()} | {error, not_found}.
 get_by_id(TenantId, UserId) ->
-    SQL = "SELECT id, tenant_id, email, password_hash, status, created_at "
+    SQL = "SELECT id, tenant_id, email, password_hash, status, created_at, role "
           "FROM users WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL",
     case pgapp:equery(SQL, [TenantId, UserId]) of
         {ok, _Cols, [Row]} ->
@@ -77,14 +77,15 @@ soft_delete(TenantId, UserId) ->
     end.
 
 %% Internal
-user_row_to_map({Id, TenantId, Email, PasswordHash, Status, CreatedAt}) ->
+user_row_to_map({Id, TenantId, Email, PasswordHash, Status, CreatedAt, Role}) ->
     #{
         id => Id,
         tenant_id => TenantId,
         email => Email,
         password_hash => PasswordHash,
         status => Status,
-        created_at => CreatedAt
+        created_at => CreatedAt,
+        role => Role
     }.
 
 is_unique_violation({error, _Severity, Code, _Msg, _Detail}) ->

@@ -62,8 +62,9 @@ login(TenantCode, Email, Password) ->
                                 <<"active">> ->
                                     UserId = maps:get(id, User),
                                     UserEmail = maps:get(email, User),
+                                    Role = maps:get(role, User, <<"user">>),
                                     maybe_migrate_hash(TenantId, UserId, Password, StoredHash),
-                                    {ok, AccessToken} = aurix_jwt:sign_access_token(UserId, TenantId, UserEmail),
+                                    {ok, AccessToken} = aurix_jwt:sign_access_token(UserId, TenantId, UserEmail, Role),
                                     {ok, RefreshToken, RefreshHash} = generate_refresh_token(),
                                     RefreshId = generate_uuid(),
                                     ExpiresAt = refresh_expiry_timestamp(),
@@ -109,7 +110,8 @@ refresh(RefreshToken) ->
                     case maps:get(status, User) of
                         <<"active">> ->
                             Email = maps:get(email, User),
-                            {ok, AccessToken} = aurix_jwt:sign_access_token(UserId, TenantId, Email),
+                            Role = maps:get(role, User, <<"user">>),
+                            {ok, AccessToken} = aurix_jwt:sign_access_token(UserId, TenantId, Email, Role),
                             {ok, NewRefresh, NewHash} = generate_refresh_token(),
                             NewRefreshId = generate_uuid(),
                             ExpiresAt = refresh_expiry_timestamp(),

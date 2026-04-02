@@ -15,7 +15,8 @@
       "BearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "bearerFormat": "JWT"
+        "bearerFormat": "JWT",
+        "description": "JWT access token. Admin endpoints require role: \"admin\" in JWT claims."
       }
     },
     "schemas": {
@@ -505,6 +506,27 @@
           "request_id": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "ForbiddenError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "example": "forbidden"
+              },
+              "message": {
+                "type": "string",
+                "example": "Admin access required"
+              },
+              "details": {
+                "type": "object"
+              }
+            }
           }
         }
       }
@@ -1386,6 +1408,255 @@
           }
         }
       }
+    },
+    "/admin/tenants": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "List all tenants",
+        "description": "Returns all tenants. Requires admin role.",
+        "operationId": "listTenants",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Tenant list",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "code": {
+                            "type": "string",
+                            "example": "aurix-demo"
+                          },
+                          "name": {
+                            "type": "string",
+                            "example": "Aurix Demo Tenant"
+                          },
+                          "status": {
+                            "type": "string",
+                            "example": "active"
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "items": [
+                    {
+                      "id": "a0000000-0000-0000-0000-000000000001",
+                      "code": "aurix-demo",
+                      "name": "Aurix Demo Tenant",
+                      "status": "active",
+                      "created_at": "2026-04-02T10:00:00Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — non-admin user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenError"
+                },
+                "example": {
+                  "error": {
+                    "code": "forbidden",
+                    "message": "Admin access required",
+                    "details": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/tenants/{tenant_id}/deactivate": {
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Deactivate a tenant",
+        "description": "Sets tenant status to inactive. All login attempts for that tenant will return 403.",
+        "operationId": "deactivateTenant",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "description": "Tenant UUID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant deactivated",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "deactivated"
+                    },
+                    "tenant_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                },
+                "example": {
+                  "status": "deactivated",
+                  "tenant_id": "a0000000-0000-0000-0000-000000000001"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — non-admin user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/gold-price": {
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Update gold price",
+        "description": "Updates the gold price per gram in EUR. Takes effect immediately for new transactions.",
+        "operationId": "updateGoldPrice",
+        "security": [{"BearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["price_eur"],
+                "properties": {
+                  "price_eur": {
+                    "type": "string",
+                    "example": "72.50"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Gold price updated",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "updated"
+                    },
+                    "price_eur": {
+                      "type": "string",
+                      "example": "72.50"
+                    }
+                  }
+                },
+                "example": {
+                  "status": "updated",
+                  "price_eur": "72.50"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request — price must be a positive decimal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "invalid_price",
+                    "message": "Price must be a positive decimal",
+                    "details": {}
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — non-admin user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "tags": [
@@ -1394,6 +1665,7 @@
     {"name": "Wallet", "description": "Wallet operations and gold trading"},
     {"name": "Transactions", "description": "Transaction history"},
     {"name": "Insights", "description": "AI-generated trading insights"},
-    {"name": "Privacy", "description": "GDPR data export and erasure"}
+    {"name": "Privacy", "description": "GDPR data export and erasure"},
+    {"name": "Admin", "description": "Admin-only operations (requires role=admin in JWT)"}
   ]
 }
