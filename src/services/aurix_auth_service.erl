@@ -1,6 +1,6 @@
 -module(aurix_auth_service).
 
--export([register/3, login/3, refresh/1, logout/1, change_password/4]).
+-export([register/3, login/3, login/2, refresh/1, logout/1, change_password/4]).
 
 %%====================================================================
 %% API
@@ -92,6 +92,85 @@ login(TenantCode, Email, Password) ->
             end;
         {error, Reason} ->
             {error, Reason}
+    end.
+
+%% Smart login — no tenant_code. Looks up email across all tenants.
+-spec login(Email :: binary(), Password :: binary()) ->
+    {ok, map()} | {error, atom()} | {error, tenant_selection_required, list()}.
+login(Email, Password) ->
+    case aurix_repo_user:find_by_email_all_tenants(Email) of
+        {error, not_found} ->
+            %% Timing attack prevention
+            _ = hash_password(<<"dummy_password_for_timing">>),
+            logger:info(#{action => <<"auth.login">>, email => mask_email(Email), result => <<"failed">>}),
+            {error, invalid_credentials};
+        {ok, [User]} ->
+            %% Found in exactly one tenant — log them in directly
+            attempt_login_for_user(User, Password);
+        {ok, Users} when length(Users) > 1 ->
+            %% Found in multiple tenants — try password against all, return matching tenants
+            MatchingTenants = lists:filtermap(fun(User) ->
+                StoredHash = maps:get(password_hash, User),
+                case verify_password(Password, StoredHash) of
+                    true ->
+                        case maps:get(status, User) of
+                            <<"active">> ->
+                                {true, #{
+                                    tenant_id => maps:get(tenant_id, User),
+                                    tenant_code => maps:get(tenant_code, User)
+                                }};
+                            _ -> false
+                        end;
+                    false -> false
+                end
+            end, Users),
+            case MatchingTenants of
+                [] ->
+                    logger:info(#{action => <<"auth.login">>, email => mask_email(Email), result => <<"failed">>}),
+                    {error, invalid_credentials};
+                [Single] ->
+                    %% Password matched in exactly one tenant
+                    TenantId = maps:get(tenant_id, Single),
+                    [MatchedUser] = [U || U <- Users, maps:get(tenant_id, U) =:= TenantId],
+                    attempt_login_for_user(MatchedUser, Password);
+                Multiple ->
+                    %% Multiple matches — client must pick
+                    TenantList = [#{tenant_code => maps:get(tenant_code, T)} || T <- Multiple],
+                    {error, tenant_selection_required, TenantList}
+            end
+    end.
+
+%% Internal helper — completes login for a confirmed user record
+attempt_login_for_user(User, Password) ->
+    TenantId = maps:get(tenant_id, User),
+    StoredHash = maps:get(password_hash, User),
+    case verify_password(Password, StoredHash) of
+        true ->
+            case maps:get(status, User) of
+                <<"active">> ->
+                    UserId = maps:get(id, User),
+                    UserEmail = maps:get(email, User),
+                    Role = maps:get(role, User, <<"user">>),
+                    maybe_migrate_hash(TenantId, UserId, Password, StoredHash),
+                    {ok, AccessToken} = aurix_jwt:sign_access_token(UserId, TenantId, UserEmail, Role),
+                    {ok, RefreshToken, RefreshHash} = generate_refresh_token(),
+                    RefreshId = generate_uuid(),
+                    ExpiresAt = refresh_expiry_timestamp(),
+                    ok = aurix_repo_refresh_token:create(RefreshId, TenantId, UserId, RefreshHash, ExpiresAt),
+                    logger:info(#{action => <<"auth.login">>, tenant_id => TenantId, user_id => UserId, email => mask_email(UserEmail), result => <<"success">>}),
+                    {ok, #{
+                        access_token => AccessToken,
+                        refresh_token => RefreshToken,
+                        token_type => <<"Bearer">>,
+                        expires_in => application:get_env(aurix, jwt_access_ttl_sec, 900)
+                    }};
+                _ ->
+                    logger:warning(#{action => <<"auth.login">>, tenant_id => TenantId, email => mask_email(maps:get(email, User)), result => <<"account_disabled">>}),
+                    {error, account_disabled}
+            end;
+        false ->
+            logger:info(#{action => <<"auth.login">>, email => mask_email(maps:get(email, User)), result => <<"failed">>}),
+            {error, invalid_credentials}
     end.
 
 %% US-1.3 Refresh token

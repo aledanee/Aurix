@@ -3,11 +3,11 @@
 -include_lib("stdlib/include/assert.hrl").
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([register_test/1, login_test/1, refresh_token_test/1,
+-export([register_test/1, login_test/1, login_smart_test/1, refresh_token_test/1,
          logout_test/1, change_password_test/1]).
 
 all() ->
-    [register_test, login_test, refresh_token_test,
+    [register_test, login_test, login_smart_test, refresh_token_test,
      logout_test, change_password_test].
 
 init_per_suite(Config) ->
@@ -49,6 +49,21 @@ login_test(_Config) ->
     Tokens = jsx:decode(list_to_binary(LoginResp), [return_maps]),
     ?assert(maps:is_key(<<"access_token">>, Tokens)),
     ?assert(maps:is_key(<<"refresh_token">>, Tokens)).
+
+login_smart_test(_Config) ->
+    Email = unique_email(<<"smart">>),
+    Password = <<"TestPassword123">>,
+    register_user(<<"aurix-demo">>, Email, Password),
+    %% Login without tenant_code — should work since email exists in one tenant only
+    LoginBody = jsx:encode(#{
+        <<"email">> => Email,
+        <<"password">> => Password
+    }),
+    {ok, {{_, 200, _}, _, LoginResp}} = httpc:request(post,
+        {"http://localhost:8080/auth/login", [], "application/json", LoginBody}, [], []),
+    Tokens2 = jsx:decode(list_to_binary(LoginResp), [return_maps]),
+    ?assert(maps:is_key(<<"access_token">>, Tokens2)),
+    ?assert(maps:is_key(<<"refresh_token">>, Tokens2)).
 
 refresh_token_test(_Config) ->
     {ok, Tokens} = register_and_login(<<"aurix-demo">>, unique_email(<<"refresh">>), <<"TestPassword123">>),

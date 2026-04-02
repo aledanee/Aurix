@@ -1,15 +1,11 @@
 import React, { useState } from 'react';
 import { buyGold, sellGold } from '../api/client';
-
-function formatEur(cents) {
-  const euros = Number(cents) / 100;
-  return new Intl.NumberFormat('en-EU', {
-    style: 'currency',
-    currency: 'EUR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(euros);
-}
+import {
+  estimateGrossEurCents,
+  formatEurCents,
+  formatGoldGrams,
+  isPositiveGoldAmount,
+} from '../utils/finance';
 
 export default function TradeForm({ type, goldPriceCents, onSuccess }) {
   const [grams, setGrams] = useState('');
@@ -19,16 +15,15 @@ export default function TradeForm({ type, goldPriceCents, onSuccess }) {
 
   const isBuy = type === 'buy';
   const estimatedCents = grams && goldPriceCents
-    ? Math.round(parseFloat(grams) * Number(goldPriceCents))
-    : 0;
+    ? estimateGrossEurCents(grams, goldPriceCents)
+    : null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
     setResult(null);
 
-    const gramsNum = parseFloat(grams);
-    if (!gramsNum || gramsNum <= 0) {
+    if (!isPositiveGoldAmount(grams)) {
       setError('Please enter a valid amount of grams.');
       return;
     }
@@ -50,14 +45,25 @@ export default function TradeForm({ type, goldPriceCents, onSuccess }) {
 
   return (
     <div className="card trade-form">
-      <h3 className="trade-form__title">
-        {isBuy ? '▲ Buy Gold' : '▼ Sell Gold'}
-      </h3>
+      <div className="trade-form__header">
+        <span className="trade-form__eyebrow">
+          {isBuy ? 'Acquire gold' : 'Convert to EUR'}
+        </span>
+        <h3 className="trade-form__title">{isBuy ? 'Buy gold' : 'Sell gold'}</h3>
+        <p className="trade-form__copy">
+          {isBuy
+            ? 'Submit a purchase order using the latest live quote.'
+            : 'Sell part of your holdings back into EUR with the same secure flow.'}
+        </p>
+      </div>
 
       {goldPriceCents && (
-        <p className="trade-form__price">
-          Current price: <strong>{formatEur(goldPriceCents)}</strong> / gram
-        </p>
+        <div className="trade-form__meta">
+          <p className="trade-form__price">
+            <span className="trade-form__price-label">Current price</span>
+            <strong>{formatEurCents(goldPriceCents)} / gram</strong>
+          </p>
+        </div>
       )}
 
       <form onSubmit={handleSubmit}>
@@ -69,40 +75,57 @@ export default function TradeForm({ type, goldPriceCents, onSuccess }) {
             step="0.0001"
             min="0.0001"
             className="form-input"
-            placeholder="e.g. 1.5"
+            placeholder="e.g. 1.2500"
             value={grams}
             onChange={(e) => setGrams(e.target.value)}
             disabled={loading}
           />
+          <p className="form-caption">Amounts are shown to 4 decimal places in the UI.</p>
         </div>
 
-        {grams && goldPriceCents > 0 && (
-          <p className="trade-form__estimate">
-            Estimated {isBuy ? 'cost' : 'revenue'}:{' '}
-            <strong>{formatEur(estimatedCents)}</strong>
-            <span className="text-muted"> (excl. fees)</span>
-          </p>
+        {estimatedCents != null && (
+          <div className="trade-form__estimate">
+            <span className="trade-form__estimate-label">
+              Estimated {isBuy ? 'cost' : 'revenue'}
+            </span>
+            <strong className="trade-form__estimate-value">
+              {formatEurCents(estimatedCents)}
+            </strong>
+            <span className="text-muted">Before fees are applied.</span>
+          </div>
         )}
 
         {error && <div className="alert alert--error">{error}</div>}
 
-        <button
-          type="submit"
-          className={`btn btn--block ${isBuy ? 'btn--primary' : 'btn--danger'}`}
-          disabled={loading}
-        >
-          {loading ? 'Processing…' : isBuy ? 'Buy Gold' : 'Sell Gold'}
+        <button type="submit" className="btn btn--primary btn--block" disabled={loading}>
+          {loading ? 'Processing...' : isBuy ? 'Review and buy' : 'Review and sell'}
         </button>
+        <p className="trade-form__helper">
+          Each trade request includes an idempotency key to protect against accidental repeats.
+        </p>
       </form>
 
       {result && (
         <div className="alert alert--success trade-form__result">
-          <strong>Trade completed!</strong>
+          <strong>Trade completed</strong>
           <ul>
-            <li>Grams: {parseFloat(result.gold_grams).toFixed(4)}</li>
-            <li>Total: {formatEur(result.gross_eur_cents)}</li>
+            <li>
+              <span className="trade-form__result-label">Amount</span>
+              <span className="trade-form__result-value">{formatGoldGrams(result.gold_grams)}</span>
+            </li>
+            <li>
+              <span className="trade-form__result-label">Gross total</span>
+              <span className="trade-form__result-value">
+                {formatEurCents(result.gross_eur_cents)}
+              </span>
+            </li>
             {result.fee_eur_cents != null && (
-              <li>Fee: {formatEur(result.fee_eur_cents)}</li>
+              <li>
+                <span className="trade-form__result-label">Fee</span>
+                <span className="trade-form__result-value">
+                  {formatEurCents(result.fee_eur_cents)}
+                </span>
+              </li>
             )}
           </ul>
         </div>

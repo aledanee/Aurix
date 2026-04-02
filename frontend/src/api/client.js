@@ -75,6 +75,9 @@ export async function apiFetch(path, options = {}) {
     const err = new Error(message);
     err.code = code;
     err.status = res.status;
+    if (body && body.tenants) {
+      err.tenants = body.tenants;
+    }
     throw err;
   }
 
@@ -90,10 +93,12 @@ export function register(tenantCode, email, password) {
   });
 }
 
-export function login(tenantCode, email, password) {
+export function login(email, password, tenantCode) {
+  const body = { email, password };
+  if (tenantCode) body.tenant_code = tenantCode;
   return apiFetch('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ tenant_code: tenantCode, email, password }),
+    body: JSON.stringify(body),
   });
 }
 

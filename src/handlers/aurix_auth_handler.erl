@@ -53,22 +53,41 @@ handle_action(login, Req0) ->
     RequestId = maps:get(request_id, Req0, undefined),
     logger:set_process_metadata(#{request_id => RequestId}),
     case jsx:decode(Body, [return_maps]) of
-        #{<<"tenant_code">> := TenantCode, <<"email">> := Email, <<"password">> := Password} ->
+        #{<<"email">> := Email, <<"password">> := Password} = Parsed ->
+            TenantCode = maps:get(<<"tenant_code">>, Parsed, undefined),
             Ip = peer_ip(Req1),
-            case aurix_rate_limiter:check_rate(TenantCode, <<"anonymous">>, <<"login">>, Ip) of
+            RateKey = case TenantCode of
+                undefined -> <<"global">>;
+                TC -> TC
+            end,
+            case aurix_rate_limiter:check_rate(RateKey, <<"anonymous">>, <<"login">>, Ip) of
                 {error, rate_limited, RateInfo} ->
                     aurix_rate_headers:reply_rate_limited(RateInfo, Req1);
                 {ok, RateInfo} ->
                     Req2 = aurix_rate_headers:set_headers(RateInfo, Req1),
-                    case aurix_auth_service:login(TenantCode, Email, Password) of
+                    Result = case TenantCode of
+                        undefined ->
+                            aurix_auth_service:login(Email, Password);
+                        _ ->
+                            aurix_auth_service:login(TenantCode, Email, Password)
+                    end,
+                    case Result of
                         {ok, Tokens} ->
                             reply_json(200, Tokens, Req2);
+                        {error, tenant_selection_required, Tenants} ->
+                            reply_json(409, #{
+                                error => #{
+                                    code => <<"tenant_selection_required">>,
+                                    message => <<"Multiple tenants found. Please select one.">>
+                                },
+                                tenants => Tenants
+                            }, Req2);
                         {error, Reason} ->
                             reply_service_error(Reason, Req2)
                     end
             end;
         _ ->
-            aurix_auth_middleware:reply_error(400, <<"bad_request">>, <<"Missing required fields">>, Req1)
+            aurix_auth_middleware:reply_error(400, <<"bad_request">>, <<"Missing required fields: email and password">>, Req1)
     end;
 
 handle_action(refresh, Req0) ->
@@ -177,6 +196,8 @@ reply_service_error(token_expired, Req) ->
     aurix_auth_middleware:reply_error(401, <<"token_expired">>, <<"Refresh token has expired">>, Req);
 reply_service_error(password_unchanged, Req) ->
     aurix_auth_middleware:reply_error(400, <<"invalid_password">>, <<"New password must differ from current password">>, Req);
+reply_service_error(tenant_selection_required, Req) ->
+    aurix_auth_middleware:reply_error(409, <<"tenant_selection_required">>, <<"Multiple tenants found">>, Req);
 reply_service_error(_, Req) ->
     aurix_auth_middleware:reply_error(500, <<"internal_error">>, <<"An unexpected error occurred">>, Req).
 

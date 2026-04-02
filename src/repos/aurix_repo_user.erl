@@ -1,6 +1,6 @@
 -module(aurix_repo_user).
 
--export([create/4, create/5, get_by_email/2, get_by_id/2, update_password_hash/3, soft_delete/2]).
+-export([create/4, create/5, get_by_email/2, get_by_id/2, update_password_hash/3, soft_delete/2, find_by_email_all_tenants/1]).
 
 %% Creates a new user. Returns the generated user ID.
 -spec create(TenantId :: binary(), Email :: binary(), PasswordHash :: binary(), UserId :: binary()) ->
@@ -86,6 +86,32 @@ user_row_to_map({Id, TenantId, Email, PasswordHash, Status, CreatedAt, Role}) ->
         status => Status,
         created_at => CreatedAt,
         role => Role
+    }.
+
+%% Finds all active users with the given email across all tenants.
+%% Used for smart login when tenant_code is not provided.
+-spec find_by_email_all_tenants(Email :: binary()) -> {ok, [map()]} | {error, not_found}.
+find_by_email_all_tenants(Email) ->
+    SQL = "SELECT u.id, u.tenant_id, u.email, u.password_hash, u.status, u.created_at, u.role, t.code as tenant_code "
+          "FROM users u JOIN tenants t ON u.tenant_id = t.id "
+          "WHERE u.email = $1 AND u.deleted_at IS NULL AND t.status = 'active'",
+    case pgapp:equery(SQL, [Email]) of
+        {ok, _Cols, []} ->
+            {error, not_found};
+        {ok, _Cols, Rows} ->
+            {ok, [user_with_tenant_row_to_map(R) || R <- Rows]}
+    end.
+
+user_with_tenant_row_to_map({Id, TenantId, Email, PasswordHash, Status, CreatedAt, Role, TenantCode}) ->
+    #{
+        id => Id,
+        tenant_id => TenantId,
+        email => Email,
+        password_hash => PasswordHash,
+        status => Status,
+        created_at => CreatedAt,
+        role => Role,
+        tenant_code => TenantCode
     }.
 
 is_unique_violation({error, _Severity, Code, _Msg, _Detail}) ->

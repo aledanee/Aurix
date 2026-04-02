@@ -1,14 +1,5 @@
 import React from 'react';
-
-function formatEur(cents) {
-  const euros = Number(cents) / 100;
-  return new Intl.NumberFormat('en-EU', {
-    style: 'currency',
-    currency: 'EUR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(euros);
-}
+import { formatEurCents, formatGoldGrams } from '../utils/finance';
 
 function formatDate(iso) {
   const d = new Date(iso);
@@ -23,49 +14,71 @@ function formatDate(iso) {
 
 export default function TransactionList({ transactions }) {
   if (!transactions || transactions.length === 0) {
-    return <p className="text-muted">No transactions yet.</p>;
+    return (
+      <div className="card empty-state">
+        <p className="empty-state__eyebrow">Transactions</p>
+        <h3 className="empty-state__title">No activity yet</h3>
+        <p className="empty-state__copy">
+          Completed buy and sell orders will appear here as soon as your wallet starts moving.
+        </p>
+      </div>
+    );
   }
 
   return (
-    <div className="table-responsive">
-      <table className="table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Type</th>
-            <th>Grams</th>
-            <th>Price/gram</th>
-            <th>Gross EUR</th>
-            <th>Fee EUR</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {transactions.map((txn) => (
-            <tr key={txn.id}>
-              <td>{formatDate(txn.created_at)}</td>
-              <td>
-                <span
-                  className={`badge ${
-                    txn.type === 'buy' ? 'badge--success' : 'badge--danger'
-                  }`}
-                >
-                  {txn.type.toUpperCase()}
-                </span>
-              </td>
-              <td>{parseFloat(txn.gold_grams).toFixed(4)}</td>
-              <td>{formatEur(txn.price_per_gram_cents)}</td>
-              <td>{formatEur(txn.gross_eur_cents)}</td>
-              <td>{formatEur(txn.fee_eur_cents)}</td>
-              <td>
-                <span className={`badge badge--${txn.status === 'completed' ? 'success' : 'warning'}`}>
-                  {txn.status}
-                </span>
-              </td>
+    <div className="card table-card">
+      <div className="table-card__header">
+        <div>
+          <p className="table-card__eyebrow">Ledger view</p>
+          <h3 className="table-card__title">Transaction activity</h3>
+        </div>
+        <span className="badge badge--info">{transactions.length} loaded</span>
+      </div>
+      <div className="table-responsive">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Grams</th>
+              <th>Price/gram</th>
+              <th>Gross EUR</th>
+              <th>Fee EUR</th>
+              <th>Status</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {transactions.map((txn) => (
+              <tr key={txn.id}>
+                <td data-label="Date">
+                  <span className="table__primary">{formatDate(txn.created_at)}</span>
+                </td>
+                <td data-label="Type">
+                  <span className="transaction-direction">
+                    <span className="transaction-direction__icon">
+                      {txn.type === 'buy' ? '↑' : '↓'}
+                    </span>
+                    {txn.type === 'buy' ? 'Buy' : 'Sell'}
+                  </span>
+                </td>
+                <td data-label="Grams">
+                  <span className="table__primary">{formatGoldGrams(txn.gold_grams)}</span>
+                </td>
+                <td data-label="Price/gram">{formatEurCents(txn.price_per_gram_cents)}</td>
+                <td data-label="Gross EUR">{formatEurCents(txn.gross_eur_cents)}</td>
+                <td data-label="Fee EUR">
+                  {txn.fee_eur_cents == null ? '-' : formatEurCents(txn.fee_eur_cents)}
+                </td>
+                <td data-label="Status">
+                  <span className={`badge badge--${txn.status === 'completed' ? 'success' : 'warning'}`}>
+                    {txn.status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

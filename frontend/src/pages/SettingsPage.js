@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { changePassword, getPrivacyExport, requestErasure } from '../api/client';
 
 export default function SettingsPage() {
-  // ─── Change Password ─────────────────────────────────────────
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNew, setConfirmNew] = useState('');
@@ -38,7 +37,6 @@ export default function SettingsPage() {
     }
   };
 
-  // ─── Privacy Export ───────────────────────────────────────────
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState(null);
   const [exportSuccess, setExportSuccess] = useState(null);
@@ -66,7 +64,6 @@ export default function SettingsPage() {
     }
   };
 
-  // ─── Erasure Request ──────────────────────────────────────────
   const [erasureLoading, setErasureLoading] = useState(false);
   const [erasureError, setErasureError] = useState(null);
   const [erasureSuccess, setErasureSuccess] = useState(null);
@@ -94,83 +91,130 @@ export default function SettingsPage() {
 
   return (
     <div className="page">
-      <h1 className="page-title">Settings</h1>
+      <div className="page-header">
+        <div>
+          <p className="page-kicker">Account</p>
+          <h1 className="page-title">Settings</h1>
+          <p className="page-subtitle">
+            Manage password changes, export requests, and account-level privacy actions from one
+            organized control surface.
+          </p>
+        </div>
 
-      {/* Change Password */}
-      <div className="card settings-section">
-        <h2>Change Password</h2>
-        <form onSubmit={handleChangePassword}>
-          <div className="form-group">
-            <label htmlFor="currentPassword">Current Password</label>
-            <input
-              id="currentPassword"
-              type="password"
-              className="form-input"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              required
-              disabled={pwLoading}
-            />
+        <div className="page-chip-group">
+          <div className="page-chip page-chip--accent">
+            <span className="page-chip__label">Security</span>
+            <strong className="page-chip__value">Password</strong>
           </div>
-          <div className="form-group">
-            <label htmlFor="newPassword">New Password</label>
-            <input
-              id="newPassword"
-              type="password"
-              className="form-input"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              required
-              disabled={pwLoading}
-            />
+          <div className="page-chip">
+            <span className="page-chip__label">Privacy</span>
+            <strong className="page-chip__value">Export + erasure</strong>
           </div>
-          <div className="form-group">
-            <label htmlFor="confirmNew">Confirm New Password</label>
-            <input
-              id="confirmNew"
-              type="password"
-              className="form-input"
-              value={confirmNew}
-              onChange={(e) => setConfirmNew(e.target.value)}
-              required
-              disabled={pwLoading}
-            />
-          </div>
-          {pwError && <div className="alert alert--error">{pwError}</div>}
-          {pwSuccess && <div className="alert alert--success">{pwSuccess}</div>}
-          <button type="submit" className="btn btn--primary" disabled={pwLoading}>
-            {pwLoading ? 'Changing…' : 'Change Password'}
-          </button>
-        </form>
+        </div>
       </div>
 
-      {/* Privacy */}
-      <div className="card settings-section">
-        <h2>Privacy &amp; Data</h2>
-        <div className="settings-actions">
-          <div>
-            <p>Download a copy of all your data.</p>
-            {exportError && <div className="alert alert--error">{exportError}</div>}
-            {exportSuccess && <div className="alert alert--success">{exportSuccess}</div>}
-            <button
-              className="btn btn--secondary"
-              onClick={handleExport}
-              disabled={exportLoading}
-            >
-              {exportLoading ? 'Exporting…' : 'Export Data'}
-            </button>
+      <div className="settings-grid">
+        <div className="card surface-card settings-section">
+          <div className="surface-header">
+            <p className="surface-kicker">Security</p>
+            <h2 className="surface-title">Change password</h2>
+            <p className="surface-copy">
+              Update the credential used to access your Aurix workspace.
+            </p>
           </div>
-          <div>
-            <p>Request permanent deletion of your account and data.</p>
-            {erasureError && <div className="alert alert--error">{erasureError}</div>}
-            {erasureSuccess && <div className="alert alert--success">{erasureSuccess}</div>}
-            <button
-              className="btn btn--danger"
-              onClick={handleErasure}
-              disabled={erasureLoading}
-            >
-              {erasureLoading ? 'Requesting…' : 'Request Erasure'}
+
+          <form onSubmit={handleChangePassword}>
+            <div className="form-group">
+              <label htmlFor="currentPassword">Current password</label>
+              <input
+                id="currentPassword"
+                type="password"
+                className="form-input"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                required
+                disabled={pwLoading}
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="newPassword">New password</label>
+              <input
+                id="newPassword"
+                type="password"
+                className="form-input"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                disabled={pwLoading}
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="confirmNew">Confirm new password</label>
+              <input
+                id="confirmNew"
+                type="password"
+                className="form-input"
+                value={confirmNew}
+                onChange={(e) => setConfirmNew(e.target.value)}
+                required
+                disabled={pwLoading}
+              />
+            </div>
+            {pwError && <div className="alert alert--error">{pwError}</div>}
+            {pwSuccess && <div className="alert alert--success">{pwSuccess}</div>}
+            <button type="submit" className="btn btn--primary" disabled={pwLoading}>
+              {pwLoading ? 'Changing...' : 'Change password'}
             </button>
+          </form>
+        </div>
+
+        <div className="settings-side">
+          <div className="card surface-card settings-section">
+            <div className="surface-header">
+              <p className="surface-kicker">Privacy</p>
+              <h2 className="surface-title">Data controls</h2>
+              <p className="surface-copy">
+                Export your account data or submit a permanent erasure request.
+              </p>
+            </div>
+
+            <div className="action-grid">
+              <div className="action-tile">
+                <div className="action-tile__header">
+                  <h3 className="action-tile__title">Export data</h3>
+                  <span className="badge badge--info">JSON</span>
+                </div>
+                <p>Download a copy of all data currently associated with your account.</p>
+                {exportError && <div className="alert alert--error">{exportError}</div>}
+                {exportSuccess && <div className="alert alert--success">{exportSuccess}</div>}
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  onClick={handleExport}
+                  disabled={exportLoading}
+                >
+                  {exportLoading ? 'Exporting...' : 'Export data'}
+                </button>
+              </div>
+
+              <div className="action-tile action-tile--danger">
+                <div className="action-tile__header">
+                  <h3 className="action-tile__title">Request erasure</h3>
+                  <span className="badge badge--danger">Permanent</span>
+                </div>
+                <p>Submit a permanent deletion request for your account and associated data.</p>
+                {erasureError && <div className="alert alert--error">{erasureError}</div>}
+                {erasureSuccess && <div className="alert alert--success">{erasureSuccess}</div>}
+                <button
+                  type="button"
+                  className="btn btn--danger"
+                  onClick={handleErasure}
+                  disabled={erasureLoading}
+                >
+                  {erasureLoading ? 'Requesting...' : 'Request erasure'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

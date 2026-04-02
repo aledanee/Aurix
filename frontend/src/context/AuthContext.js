@@ -68,8 +68,8 @@ export function AuthProvider({ children }) {
   }, [applyToken]);
 
   const loginFn = useCallback(
-    async (tenantCode, email, password) => {
-      const data = await apiLogin(tenantCode, email, password);
+    async (email, password, tenantCode) => {
+      const data = await apiLogin(email, password, tenantCode);
       setTokens(data.access_token, data.refresh_token);
       applyToken(data.access_token);
       return data;
