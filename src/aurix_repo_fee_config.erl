@@ -3,7 +3,8 @@
 -export([get_by_tenant_id/1]).
 
 %% Gets the fee configuration for a tenant.
--spec get_by_tenant_id(TenantId :: binary()) -> {ok, map()} | {error, not_found}.
+%% Returns default values if no override exists for the tenant.
+-spec get_by_tenant_id(TenantId :: binary()) -> {ok, map()}.
 get_by_tenant_id(TenantId) ->
     SQL = "SELECT id, tenant_id, buy_fee_rate, sell_fee_rate, min_fee_eur_cents "
           "FROM tenant_fee_config WHERE tenant_id = $1",
@@ -11,8 +12,17 @@ get_by_tenant_id(TenantId) ->
         {ok, _Cols, [Row]} ->
             {ok, fee_config_row_to_map(Row)};
         {ok, _Cols, []} ->
-            {error, not_found}
+            {ok, default_fee_config(TenantId)}
     end.
+
+default_fee_config(TenantId) ->
+    #{
+        id => undefined,
+        tenant_id => TenantId,
+        buy_fee_rate => <<"0.005000">>,
+        sell_fee_rate => <<"0.005000">>,
+        min_fee_eur_cents => 50
+    }.
 
 %% Internal
 %% Note: PostgreSQL numeric(10,6) values come from epgsql as floats or binary strings.

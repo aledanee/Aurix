@@ -10,26 +10,29 @@
 -spec register(TenantCode :: binary(), Email :: binary(), Password :: binary()) ->
     {ok, map()} | {error, atom()}.
 register(TenantCode, Email, Password) ->
-    case resolve_active_tenant(TenantCode) of
+    case aurix_tenant_service:resolve_active_tenant(TenantCode) of
         {ok, Tenant} ->
             TenantId = maps:get(id, Tenant),
             case validate_password(Password) of
                 ok ->
                     PasswordHash = hash_password(Password),
                     UserId = generate_uuid(),
-                    case aurix_repo_user:create(TenantId, Email, PasswordHash, UserId) of
-                        {ok, UserId} ->
-                            WalletId = generate_uuid(),
-                            {ok, _} = aurix_repo_wallet:create(TenantId, UserId, WalletId),
-                            {ok, #{
-                                user_id => UserId,
-                                email => Email,
-                                tenant_id => TenantId,
-                                wallet_id => WalletId
-                            }};
-                        {error, email_taken} ->
-                            {error, email_taken}
-                    end;
+                    WalletId = generate_uuid(),
+                    aurix_db:transaction(fun(Conn) ->
+                        case aurix_repo_user:create(Conn, TenantId, Email, PasswordHash, UserId) of
+                            {ok, UserId} ->
+                                {ok, _} = aurix_repo_wallet:create(Conn, TenantId, UserId, WalletId),
+                                {ok, #{
+                                    user_id => UserId,
+                                    email => Email,
+                                    tenant_id => TenantId,
+                                    wallet_id => WalletId,
+                                    created_at => iso8601_now()
+                                }};
+                            {error, email_taken} ->
+                                {error, email_taken}
+                        end
+                    end);
                 {error, Reason} ->
                     {error, Reason}
             end;
@@ -41,7 +44,7 @@ register(TenantCode, Email, Password) ->
 -spec login(TenantCode :: binary(), Email :: binary(), Password :: binary()) ->
     {ok, map()} | {error, atom()}.
 login(TenantCode, Email, Password) ->
-    case resolve_active_tenant(TenantCode) of
+    case aurix_tenant_service:resolve_active_tenant(TenantCode) of
         {ok, Tenant} ->
             TenantId = maps:get(id, Tenant),
             case aurix_repo_user:get_by_email(TenantId, Email) of
@@ -53,6 +56,7 @@ login(TenantCode, Email, Password) ->
                                 <<"active">> ->
                                     UserId = maps:get(id, User),
                                     UserEmail = maps:get(email, User),
+                                    maybe_migrate_hash(TenantId, UserId, Password, StoredHash),
                                     {ok, AccessToken} = aurix_jwt:sign_access_token(UserId, TenantId, UserEmail),
                                     {ok, RefreshToken, RefreshHash} = generate_refresh_token(),
                                     RefreshId = generate_uuid(),
@@ -92,23 +96,37 @@ refresh(RefreshToken) ->
             UserId = maps:get(user_id, TokenRecord),
             case aurix_repo_user:get_by_id(TenantId, UserId) of
                 {ok, User} ->
-                    Email = maps:get(email, User),
-                    {ok, AccessToken} = aurix_jwt:sign_access_token(UserId, TenantId, Email),
-                    {ok, NewRefresh, NewHash} = generate_refresh_token(),
-                    NewRefreshId = generate_uuid(),
-                    ExpiresAt = refresh_expiry_timestamp(),
-                    ok = aurix_repo_refresh_token:create(NewRefreshId, TenantId, UserId, NewHash, ExpiresAt),
-                    {ok, #{
-                        access_token => AccessToken,
-                        refresh_token => NewRefresh,
-                        token_type => <<"Bearer">>,
-                        expires_in => application:get_env(aurix, jwt_access_ttl_sec, 900)
-                    }};
+                    case maps:get(status, User) of
+                        <<"active">> ->
+                            Email = maps:get(email, User),
+                            {ok, AccessToken} = aurix_jwt:sign_access_token(UserId, TenantId, Email),
+                            {ok, NewRefresh, NewHash} = generate_refresh_token(),
+                            NewRefreshId = generate_uuid(),
+                            ExpiresAt = refresh_expiry_timestamp(),
+                            ok = aurix_repo_refresh_token:create(NewRefreshId, TenantId, UserId, NewHash, ExpiresAt),
+                            {ok, #{
+                                access_token => AccessToken,
+                                refresh_token => NewRefresh,
+                                token_type => <<"Bearer">>,
+                                expires_in => application:get_env(aurix, jwt_access_ttl_sec, 900)
+                            }};
+                        _ ->
+                            {error, account_disabled}
+                    end;
                 {error, not_found} ->
                     {error, unauthorized}
             end;
         {error, not_found} ->
-            {error, unauthorized}
+            %% Check if the token exists but is expired or revoked
+            case aurix_repo_refresh_token:get_by_hash_any(Hash) of
+                {ok, Record} ->
+                    case maps:get(revoked_at, Record) of
+                        V when V =/= null, V =/= undefined -> {error, token_revoked};
+                        _ -> {error, token_expired}
+                    end;
+                {error, not_found} ->
+                    {error, unauthorized}
+            end
     end.
 
 %% US-1.4 Logout (revoke refresh token)
@@ -142,6 +160,7 @@ change_password(TenantId, UserId, CurrentPassword, NewPassword) ->
                                     NewHash = hash_password(NewPassword),
                                     ok = aurix_repo_user:update_password_hash(TenantId, UserId, NewHash),
                                     ok = aurix_repo_refresh_token:revoke_all_for_user(TenantId, UserId),
+                                    ok = aurix_jwt_blacklist:blacklist_user(UserId),
                                     ok
                             end;
                         {error, Reason} ->
@@ -158,17 +177,6 @@ change_password(TenantId, UserId, CurrentPassword, NewPassword) ->
 %% Internal
 %%====================================================================
 
-%% Resolves a tenant code to an active tenant record
-resolve_active_tenant(TenantCode) ->
-    case aurix_repo_tenant:get_by_code(TenantCode) of
-        {ok, #{status := <<"active">>} = Tenant} ->
-            {ok, Tenant};
-        {ok, _Inactive} ->
-            {error, tenant_inactive};
-        {error, not_found} ->
-            {error, invalid_tenant}
-    end.
-
 %% Password validation: min 10 chars, max 128, uppercase, lowercase, digit
 validate_password(Password) when is_binary(Password) ->
     Len = byte_size(Password),
@@ -183,15 +191,36 @@ validate_password(Password) when is_binary(Password) ->
 validate_password(_) ->
     {error, invalid_password}.
 
-%% Hash password with bcrypt (cost factor 12)
+%% Hash password with argon2id primary, bcrypt cost-12 fallback
 hash_password(Password) when is_binary(Password) ->
-    {ok, Salt} = bcrypt:gen_salt(12),
-    {ok, Hash} = bcrypt:hashpw(binary_to_list(Password), Salt),
-    list_to_binary(Hash).
+    try
+        argon2:hash_pwd_salt(Password, [{t_cost, 3}, {m_cost, 16}, {parallelism, 1}, {argon2_type, 2}])
+    catch
+        _:_ ->
+            {ok, Salt} = bcrypt:gen_salt(12),
+            {ok, Hash} = bcrypt:hashpw(binary_to_list(Password), Salt),
+            list_to_binary(Hash)
+    end.
 
-%% Verify password against stored bcrypt hash (constant-time comparison)
+%% Verify password against stored hash (argon2id or bcrypt)
 verify_password(Password, StoredHash) when is_binary(Password), is_binary(StoredHash) ->
-    {ok, StoredHash} =:= bcrypt:hashpw(binary_to_list(Password), binary_to_list(StoredHash)).
+    case StoredHash of
+        <<"$argon2", _/binary>> ->
+            argon2:verify_pass(Password, StoredHash);
+        <<"$2", _/binary>> ->
+            {ok, StoredHash} =:= bcrypt:hashpw(binary_to_list(Password), binary_to_list(StoredHash));
+        _ ->
+            false
+    end.
+
+%% Migrate old bcrypt hash to argon2id on successful login
+maybe_migrate_hash(TenantId, UserId, Password, StoredHash) ->
+    case StoredHash of
+        <<"$argon2", _/binary>> -> ok;
+        _ ->
+            NewHash = hash_password(Password),
+            aurix_repo_user:update_password_hash(TenantId, UserId, NewHash)
+    end.
 
 %% Generate a random refresh token and its SHA-256 hash
 generate_refresh_token() ->
@@ -214,3 +243,9 @@ refresh_expiry_timestamp() ->
 %% Generate a UUID v4 as binary string
 generate_uuid() ->
     uuid:uuid_to_string(uuid:get_v4_urandom(), binary_standard).
+
+%% ISO 8601 UTC timestamp
+iso8601_now() ->
+    {{Y, Mo, D}, {H, Mi, S}} = calendar:universal_time(),
+    iolist_to_binary(io_lib:format("~4..0B-~2..0B-~2..0BT~2..0B:~2..0B:~2..0BZ",
+                                    [Y, Mo, D, H, Mi, S])).

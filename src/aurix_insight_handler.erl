@@ -9,33 +9,46 @@ init(Req0, State) ->
                 {ok, Claims} ->
                     TenantId = maps:get(<<"tenant_id">>, Claims),
                     UserId = maps:get(<<"sub">>, Claims),
-                    QS = cowboy_req:parse_qs(Req0),
+                    case aurix_rate_limiter:check_rate(TenantId, UserId, <<"insights">>) of
+                        {error, rate_limited, RateInfo} ->
+                            Req = aurix_rate_headers:reply_rate_limited(RateInfo, Req0),
+                            {ok, Req, State};
+                        {ok, RateInfo} ->
+                    Req1 = aurix_rate_headers:set_headers(RateInfo, Req0),
+                    QS = cowboy_req:parse_qs(Req1),
                     Limit = parse_limit(proplists:get_value(<<"limit">>, QS, <<"10">>), 50),
                     FreqFilter = proplists:get_value(<<"frequency">>, QS, undefined),
                     CursorParam = proplists:get_value(<<"cursor">>, QS, undefined),
 
-                    Cursor = case CursorParam of
-                        undefined -> undefined;
-                        CursorBin ->
-                            case aurix_repo_insight:decode_cursor(CursorBin) of
-                                {ok, C} -> C;
-                                {error, _} -> undefined
-                            end
-                    end,
+                    CacheKey = iolist_to_binary([<<"insights:">>, TenantId, <<":">>, UserId,
+                        <<":">>, integer_to_binary(Limit),
+                        case FreqFilter of undefined -> <<>>; F -> [<<":">>, F] end,
+                        case CursorParam of undefined -> <<>>; CP -> [<<":">>, CP] end]),
 
-                    Opts = #{limit => Limit, frequency => FreqFilter},
-                    {ok, Items, NextCursor} = aurix_repo_insight:list_by_user(TenantId, UserId, Cursor, Opts),
-
-                    FormattedItems = [format_insight(Item) || Item <- Items],
-                    Response = #{
-                        <<"items">> => FormattedItems,
-                        <<"next_cursor">> => NextCursor
-                    },
-                    Body = jsx:encode(Response),
-                    Req = cowboy_req:reply(200,
-                        #{<<"content-type">> => <<"application/json">>},
-                        Body, Req0),
-                    {ok, Req, State};
+                    case aurix_redis:q(["GET", CacheKey]) of
+                        {ok, CachedBin} when is_binary(CachedBin) ->
+                            %% Cache hit
+                            Req = cowboy_req:reply(200,
+                                #{<<"content-type">> => <<"application/json">>},
+                                CachedBin, Req1),
+                            {ok, Req, State};
+                        _ ->
+                            %% Cache miss or Redis error — query DB
+                            Opts = #{limit => Limit, frequency => FreqFilter},
+                            {ok, FormattedItems, NextCursor} = aurix_agent_service:list_insights(TenantId, UserId, CursorParam, Opts),
+                            Response = #{
+                                <<"items">> => FormattedItems,
+                                <<"next_cursor">> => NextCursor
+                            },
+                            ResponseBin = jsx:encode(Response),
+                            %% Cache with 5-minute TTL
+                            catch aurix_redis:q(["SET", CacheKey, ResponseBin, "EX", "300"]),
+                            Req = cowboy_req:reply(200,
+                                #{<<"content-type">> => <<"application/json">>},
+                                ResponseBin, Req1),
+                            {ok, Req, State}
+                    end
+                    end;
                 {error, Reason} ->
                     Req = reply_auth_error(Reason, Req0),
                     {ok, Req, State}
@@ -46,19 +59,6 @@ init(Req0, State) ->
     end.
 
 %% Internal
-
-format_insight(Item) ->
-    Summary = maps:get(summary, Item, #{}),
-    Insights = aurix_llm_adapter:generate_insights(Summary),
-    #{
-        <<"id">> => maps:get(id, Item),
-        <<"frequency">> => maps:get(frequency, Item),
-        <<"period_start">> => maps:get(period_start, Item),
-        <<"period_end">> => maps:get(period_end, Item),
-        <<"generated_at">> => maps:get(created_at, Item),
-        <<"signals">> => Summary,
-        <<"insights">> => Insights
-    }.
 
 parse_limit(Bin, Max) ->
     try

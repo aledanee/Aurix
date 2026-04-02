@@ -60,6 +60,6 @@ publish_event(Event) ->
     EventType = maps:get(event_type, Event),
     EventId = maps:get(id, Event),
     TenantId = maps:get(tenant_id, Event),
-    logger:info("Dispatching event ~p: type=~s tenant=~s", [EventId, EventType, TenantId]),
+    logger:info(#{action => <<"outbox.dispatch">>, event_id => EventId, event_type => EventType, tenant_id => TenantId}),
     %% In production: publish to Kafka here
     ok = aurix_repo_outbox:mark_published(EventId).

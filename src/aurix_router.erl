@@ -21,6 +21,10 @@ routes() ->
         %% Health
         {"/health", aurix_health_handler, #{}},
 
+        %% Swagger
+        {"/swagger", aurix_swagger_handler, #{action => ui}},
+        {"/swagger/spec", aurix_swagger_handler, #{action => spec}},
+
         %% Auth (public)
         {"/auth/register", aurix_auth_handler, #{action => register}},
         {"/auth/login", aurix_auth_handler, #{action => login}},

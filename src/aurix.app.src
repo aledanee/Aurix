@@ -13,8 +13,12 @@
         cowboy,
         jsx,
         epgsql,
+        pgapp,
         eredis,
-        jose
+        jose,
+        bcrypt,
+        argon2,
+        uuid
     ]},
     {env, []},
     {modules, []},

@@ -1,6 +1,6 @@
 -module(aurix_repo_wallet).
 
--export([create/3, get_by_user_id/2]).
+-export([create/3, create/4, get_by_user_id/2]).
 
 %% Creates a wallet for a new user with seeded EUR balance (10,000.00 = 1000000 cents).
 -spec create(TenantId :: binary(), UserId :: binary(), WalletId :: binary()) ->
@@ -9,6 +9,14 @@ create(TenantId, UserId, WalletId) ->
     SQL = "INSERT INTO wallets (id, tenant_id, user_id, gold_balance_grams, fiat_balance_eur_cents, version, created_at, updated_at) "
           "VALUES ($1, $2, $3, 0, 1000000, 1, now(), now())",
     {ok, 1} = pgapp:equery(SQL, [WalletId, TenantId, UserId]),
+    {ok, WalletId}.
+
+%% Transactional variant — uses an existing connection.
+-spec create(pid(), binary(), binary(), binary()) -> {ok, binary()}.
+create(Conn, TenantId, UserId, WalletId) ->
+    SQL = "INSERT INTO wallets (id, tenant_id, user_id, gold_balance_grams, fiat_balance_eur_cents, version, created_at, updated_at) "
+          "VALUES ($1, $2, $3, 0, 1000000, 1, now(), now())",
+    {ok, 1} = aurix_db:equery(Conn, SQL, [WalletId, TenantId, UserId]),
     {ok, WalletId}.
 
 %% Gets the wallet for a user within a tenant.

@@ -1,6 +1,6 @@
 -module(aurix_repo_refresh_token).
 
--export([create/5, get_by_hash/1, revoke/1, revoke_all_for_user/2]).
+-export([create/5, get_by_hash/1, get_by_hash_any/1, revoke/1, revoke_all_for_user/2]).
 
 %% Creates a new refresh token record.
 -spec create(Id :: binary(), TenantId :: binary(), UserId :: binary(),
@@ -16,6 +16,18 @@ create(Id, TenantId, UserId, TokenHash, ExpiresAt) ->
 get_by_hash(TokenHash) ->
     SQL = "SELECT id, tenant_id, user_id, token_hash, expires_at, revoked_at, created_at "
           "FROM refresh_tokens WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()",
+    case pgapp:equery(SQL, [TokenHash]) of
+        {ok, _Cols, [Row]} ->
+            {ok, refresh_token_row_to_map(Row)};
+        {ok, _Cols, []} ->
+            {error, not_found}
+    end.
+
+%% Finds a refresh token by hash regardless of revoked/expired status.
+-spec get_by_hash_any(TokenHash :: binary()) -> {ok, map()} | {error, not_found}.
+get_by_hash_any(TokenHash) ->
+    SQL = "SELECT id, tenant_id, user_id, token_hash, expires_at, revoked_at, created_at "
+          "FROM refresh_tokens WHERE token_hash = $1 ORDER BY created_at DESC LIMIT 1",
     case pgapp:equery(SQL, [TokenHash]) of
         {ok, _Cols, [Row]} ->
             {ok, refresh_token_row_to_map(Row)};

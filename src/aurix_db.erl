@@ -3,40 +3,36 @@
 -export([transaction/1, equery/3]).
 
 %% Execute a function within a single database transaction.
-%% Opens a dedicated connection, runs BEGIN, executes Fun(Conn),
-%% then COMMIT on {ok, _} or ROLLBACK on {error, _} / exception.
+%% Checks out a pgapp_worker from the pool for the entire transaction.
+%% Queries inside Fun must use aurix_db:equery/3 with the Worker pid.
 -spec transaction(fun((pid()) -> {ok, term()} | {error, term()})) ->
     {ok, term()} | {error, term()}.
 transaction(Fun) ->
-    {ok, DbConfig} = application:get_env(aurix, db),
-    ConnOpts = #{
-        host => proplists:get_value(host, DbConfig, "localhost"),
-        port => proplists:get_value(port, DbConfig, 5432),
-        database => proplists:get_value(database, DbConfig, "aurix_dev"),
-        username => proplists:get_value(username, DbConfig, "aurix"),
-        password => proplists:get_value(password, DbConfig, "aurix_dev_pass")
-    },
-    {ok, Conn} = epgsql:connect(ConnOpts),
+    Worker = poolboy:checkout(epgsql_pool),
     try
-        {ok, [], []} = epgsql:squery(Conn, "BEGIN"),
-        case Fun(Conn) of
-            {ok, _} = Result ->
-                {ok, [], []} = epgsql:squery(Conn, "COMMIT"),
-                Result;
-            {error, _} = Error ->
-                epgsql:squery(Conn, "ROLLBACK"),
-                Error
+        case gen_server:call(Worker, {squery, "BEGIN"}) of
+            {ok, [], []} ->
+                case Fun(Worker) of
+                    {ok, _} = Result ->
+                        {ok, [], []} = gen_server:call(Worker, {squery, "COMMIT"}),
+                        Result;
+                    {error, _} = Error ->
+                        gen_server:call(Worker, {squery, "ROLLBACK"}),
+                        Error
+                end;
+            {error, disconnected} ->
+                {error, {connection_failed, disconnected}}
         end
     catch
         Class:Reason:Stack ->
-            epgsql:squery(Conn, "ROLLBACK"),
-            logger:error("Transaction failed: ~p:~p~n~p", [Class, Reason, Stack]),
+            catch gen_server:call(Worker, {squery, "ROLLBACK"}),
+            logger:error(#{action => <<"db.transaction_failed">>, class => Class, reason => Reason, stacktrace => Stack}),
             {error, {transaction_failed, Reason}}
     after
-        epgsql:close(Conn)
+        poolboy:checkin(epgsql_pool, Worker)
     end.
 
-%% Execute a parameterized query on a specific connection (within a transaction).
+%% Execute a parameterized query on a pgapp_worker within a transaction.
 -spec equery(pid(), iodata(), list()) -> term().
-equery(Conn, SQL, Params) ->
-    epgsql:equery(Conn, SQL, Params).
+equery(Worker, SQL, Params) ->
+    gen_server:call(Worker, {equery, SQL, Params}).

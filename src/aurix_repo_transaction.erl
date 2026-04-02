@@ -50,7 +50,7 @@ insert(Conn, TxnMap) ->
         idempotency_key := IdempotencyKey
     } = TxnMap,
     Metadata = maps:get(metadata, TxnMap, null),
-    {ok, 1} = epgsql:equery(Conn, SQL, [
+    {ok, 1} = aurix_db:equery(Conn, SQL, [
         Id, TenantId, WalletId, UserId, Type,
         GoldGrams, PricePerGram, GrossEurCents, FeeEurCents,
         IdempotencyKey, Metadata

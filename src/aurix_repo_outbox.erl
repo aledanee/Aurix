@@ -33,7 +33,7 @@ insert(Conn, EventMap) ->
         payload := Payload
     } = EventMap,
     PayloadJSON = jsx:encode(Payload),
-    {ok, 1} = epgsql:equery(Conn, SQL, [TenantId, AggType, AggId, EventType, PayloadJSON]),
+    {ok, 1} = aurix_db:equery(Conn, SQL, [TenantId, AggType, AggId, EventType, PayloadJSON]),
     ok.
 
 %% Get unpublished events (for outbox dispatcher polling).

@@ -27,6 +27,8 @@ get_price() ->
 init([]) ->
     PriceStr = os:getenv("GOLD_PRICE_EUR", "65.00"),
     PriceCents = parse_price_to_cents(PriceStr),
+    cache_price(PriceCents),
+    schedule_cache_refresh(),
     {ok, #state{price_eur_cents = PriceCents}}.
 
 handle_call(get_price, _From, #state{price_eur_cents = PriceCents} = State) ->
@@ -37,6 +39,10 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+handle_info(refresh_cache, #state{price_eur_cents = PriceCents} = State) ->
+    cache_price(PriceCents),
+    schedule_cache_refresh(),
+    {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -46,6 +52,13 @@ terminate(_Reason, _State) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
+
+cache_price(PriceCents) ->
+    try aurix_redis:q(["SET", "gold:price:eur_cents", integer_to_binary(PriceCents), "EX", "60"])
+    catch _:_ -> ok end.
+
+schedule_cache_refresh() ->
+    erlang:send_after(55000, self(), refresh_cache).
 
 -spec parse_price_to_cents(string()) -> integer().
 parse_price_to_cents(Str) ->

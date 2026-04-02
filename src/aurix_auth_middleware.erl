@@ -19,7 +19,13 @@ authenticate(Req) ->
                     case aurix_jwt:verify_token(Token) of
                         {ok, Claims} ->
                             case validate_claims(Claims) of
-                                ok -> {ok, Claims};
+                                ok ->
+                                    UserId = maps:get(<<"sub">>, Claims),
+                                    Iat = maps:get(<<"iat">>, Claims, 0),
+                                    case aurix_jwt_blacklist:is_blacklisted(UserId, Iat) of
+                                        true -> {error, unauthorized};
+                                        false -> {ok, Claims}
+                                    end;
                                 error -> {error, unauthorized}
                             end;
                         {error, token_expired} ->
@@ -39,7 +45,8 @@ reply_error(StatusCode, ErrorCode, Message, Req) ->
     Body = jsx:encode(#{
         <<"error">> => #{
             <<"code">> => ErrorCode,
-            <<"message">> => Message
+            <<"message">> => Message,
+            <<"details">> => #{}
         }
     }),
     cowboy_req:reply(StatusCode,

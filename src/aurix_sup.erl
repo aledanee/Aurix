@@ -29,7 +29,9 @@ init([]) ->
         child_spec(aurix_price_provider, worker),
         child_spec(aurix_rate_limiter, worker),
         child_spec(aurix_outbox_dispatcher, worker),
-        child_spec(aurix_etl_scheduler, worker)
+        child_spec(aurix_etl_scheduler, worker),
+        child_spec(aurix_reconciliation, worker),
+        child_spec(aurix_http_sup, supervisor)
     ],
     {ok, {SupFlags, Children}}.
 

@@ -9,30 +9,28 @@ init(Req0, State) ->
                 {ok, Claims} ->
                     TenantId = maps:get(<<"tenant_id">>, Claims),
                     UserId = maps:get(<<"sub">>, Claims),
-                    QS = cowboy_req:parse_qs(Req0),
+                    case aurix_rate_limiter:check_rate(TenantId, UserId, <<"transactions">>) of
+                        {error, rate_limited, RateInfo} ->
+                            Req = aurix_rate_headers:reply_rate_limited(RateInfo, Req0),
+                            {ok, Req, State};
+                        {ok, RateInfo} ->
+                    Req1 = aurix_rate_headers:set_headers(RateInfo, Req0),
+                    QS = cowboy_req:parse_qs(Req1),
                     Limit = parse_limit(proplists:get_value(<<"limit">>, QS, <<"20">>)),
                     TypeFilter = proplists:get_value(<<"type">>, QS, undefined),
                     CursorParam = proplists:get_value(<<"cursor">>, QS, undefined),
 
-                    Cursor = case CursorParam of
-                        undefined -> undefined;
-                        CursorBin ->
-                            case aurix_repo_transaction:decode_cursor(CursorBin) of
-                                {ok, C} -> C;
-                                {error, _} -> undefined
-                            end
-                    end,
-
                     Opts = #{limit => Limit, type => TypeFilter},
-                    {ok, Items, NextCursor} = aurix_repo_transaction:list_by_user(TenantId, UserId, Cursor, Opts),
+                    {ok, Items, NextCursor} = aurix_transaction_service:list_transactions(TenantId, UserId, CursorParam, Opts),
 
                     FormattedItems = [format_transaction(Item) || Item <- Items],
                     Response = #{
                         <<"items">> => FormattedItems,
                         <<"next_cursor">> => NextCursor
                     },
-                    Req = reply_json(200, Response, Req0),
-                    {ok, Req, State};
+                    Req = reply_json(200, Response, Req1),
+                    {ok, Req, State}
+                    end;
                 {error, Reason} ->
                     Req = reply_auth_error(Reason, Req0),
                     {ok, Req, State}
