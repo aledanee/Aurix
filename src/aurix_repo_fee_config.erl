@@ -1,6 +1,6 @@
 -module(aurix_repo_fee_config).
 
--export([get_by_tenant_id/1]).
+-export([get_by_tenant_id/1, upsert/4]).
 
 %% Gets the fee configuration for a tenant.
 %% Returns default values if no override exists for the tenant.
@@ -14,6 +14,16 @@ get_by_tenant_id(TenantId) ->
         {ok, _Cols, []} ->
             {ok, default_fee_config(TenantId)}
     end.
+
+%% Inserts or updates fee configuration for a tenant.
+-spec upsert(TenantId :: binary(), BuyFeeRate :: binary(), SellFeeRate :: binary(), MinFeeEurCents :: integer()) -> ok.
+upsert(TenantId, BuyFeeRate, SellFeeRate, MinFeeEurCents) ->
+    SQL = "INSERT INTO tenant_fee_config (id, tenant_id, buy_fee_rate, sell_fee_rate, min_fee_eur_cents, created_at, updated_at) "
+          "VALUES (gen_random_uuid(), $1, $2, $3, $4, now(), now()) "
+          "ON CONFLICT (tenant_id) DO UPDATE "
+          "SET buy_fee_rate = $2, sell_fee_rate = $3, min_fee_eur_cents = $4, updated_at = now()",
+    {ok, _} = pgapp:equery(SQL, [TenantId, BuyFeeRate, SellFeeRate, MinFeeEurCents]),
+    ok.
 
 default_fee_config(TenantId) ->
     #{

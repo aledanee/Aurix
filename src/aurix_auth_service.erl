@@ -212,36 +212,24 @@ validate_password(Password) when is_binary(Password) ->
 validate_password(_) ->
     {error, invalid_password}.
 
-%% Hash password with argon2id primary, bcrypt cost-12 fallback
+%% Hash password with bcrypt cost-12
 hash_password(Password) when is_binary(Password) ->
-    try
-        argon2:hash_pwd_salt(Password, [{t_cost, 3}, {m_cost, 16}, {parallelism, 1}, {argon2_type, 2}])
-    catch
-        _:_ ->
-            {ok, Salt} = bcrypt:gen_salt(12),
-            {ok, Hash} = bcrypt:hashpw(binary_to_list(Password), Salt),
-            list_to_binary(Hash)
-    end.
+    {ok, Salt} = bcrypt:gen_salt(12),
+    {ok, Hash} = bcrypt:hashpw(binary_to_list(Password), Salt),
+    list_to_binary(Hash).
 
-%% Verify password against stored hash (argon2id or bcrypt)
+%% Verify password against stored hash (bcrypt)
 verify_password(Password, StoredHash) when is_binary(Password), is_binary(StoredHash) ->
     case StoredHash of
-        <<"$argon2", _/binary>> ->
-            argon2:verify_pass(Password, StoredHash);
         <<"$2", _/binary>> ->
             {ok, StoredHash} =:= bcrypt:hashpw(binary_to_list(Password), binary_to_list(StoredHash));
         _ ->
             false
     end.
 
-%% Migrate old bcrypt hash to argon2id on successful login
-maybe_migrate_hash(TenantId, UserId, Password, StoredHash) ->
-    case StoredHash of
-        <<"$argon2", _/binary>> -> ok;
-        _ ->
-            NewHash = hash_password(Password),
-            aurix_repo_user:update_password_hash(TenantId, UserId, NewHash)
-    end.
+%% Hash migration no longer needed — bcrypt is the sole hasher
+maybe_migrate_hash(_TenantId, _UserId, _Password, _StoredHash) ->
+    ok.
 
 %% Generate a random refresh token and its SHA-256 hash
 generate_refresh_token() ->

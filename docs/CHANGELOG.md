@@ -27,6 +27,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - `set_price/1` API on `aurix_price_provider` gen_server for runtime price updates
 - OpenAPI spec updated with all 3 admin endpoints and ForbiddenError schema
 
+**Admin Fee Config & ETL Trigger (US-4.4, US-4.6)**
+- `PUT /admin/tenants/:tenant_id/fees` — Update tenant fee schedule (admin-only, US-4.4)
+- `POST /admin/etl/trigger` — Trigger ETL aggregation on demand (admin-only, US-4.6)
+- `aurix_repo_fee_config:upsert/4` for INSERT ... ON CONFLICT fee config updates
+- `aurix_admin_service:update_fee_config/4` with fee rate validation
+- `aurix_admin_service:trigger_etl/0` wrapping `aurix_etl_scheduler:run_now/0`
+- OpenAPI spec updated with both new admin endpoints
+
 ### Changed
 - `aurix_jwt:sign_access_token/4` now accepts `Role` parameter; `/3` arity kept for backward compatibility
 - `aurix_repo_user` functions (`get_by_email/2`, `get_by_id/2`, `user_row_to_map/1`) now include `role` field

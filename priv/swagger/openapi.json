@@ -1657,6 +1657,157 @@
           }
         }
       }
+    },
+    "/admin/tenants/{tenant_id}/fees": {
+      "put": {
+        "tags": ["Admin"],
+        "summary": "Update tenant fee configuration",
+        "description": "Sets buy/sell fee rates and minimum fee for a specific tenant. Changes take effect on the next transaction.",
+        "operationId": "updateTenantFees",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "description": "Tenant UUID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["buy_fee_rate", "sell_fee_rate", "min_fee_eur_cents"],
+                "properties": {
+                  "buy_fee_rate": {
+                    "type": "string",
+                    "description": "Buy fee rate as decimal string (e.g. 0.005 = 0.5%)",
+                    "example": "0.005000"
+                  },
+                  "sell_fee_rate": {
+                    "type": "string",
+                    "description": "Sell fee rate as decimal string",
+                    "example": "0.005000"
+                  },
+                  "min_fee_eur_cents": {
+                    "type": "integer",
+                    "description": "Minimum fee in EUR cents",
+                    "example": 50
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Fee configuration updated",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "updated"
+                    },
+                    "tenant_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                },
+                "example": {
+                  "status": "updated",
+                  "tenant_id": "a0000000-0000-0000-0000-000000000001"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request (invalid_params or bad_request)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — non-admin user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/etl/trigger": {
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Trigger ETL aggregation job",
+        "description": "Manually triggers the ETL aggregation job. The job is idempotent and safe to re-run.",
+        "operationId": "triggerEtl",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "ETL job triggered",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "triggered"
+                    }
+                  }
+                },
+                "example": {
+                  "status": "triggered"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden — non-admin user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "tags": [

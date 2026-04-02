@@ -48,6 +48,31 @@ handle_action(deactivate_tenant, Req0) ->
             aurix_auth_middleware:reply_error(405, <<"method_not_allowed">>, <<"Method not allowed">>, Req0)
     end;
 
+%% PUT /admin/tenants/:tenant_id/fees
+handle_action(update_fee_config, Req0) ->
+    case cowboy_req:method(Req0) of
+        <<"PUT">> ->
+            TenantId = cowboy_req:binding(tenant_id, Req0),
+            {ok, Body, Req1} = cowboy_req:read_body(Req0),
+            Decoded = jsx:decode(Body, [return_maps]),
+            case Decoded of
+                #{<<"buy_fee_rate">> := BuyFeeRate,
+                  <<"sell_fee_rate">> := SellFeeRate,
+                  <<"min_fee_eur_cents">> := MinFeeEurCents}
+                  when is_binary(BuyFeeRate), is_binary(SellFeeRate), is_integer(MinFeeEurCents) ->
+                    case aurix_admin_service:update_fee_config(TenantId, BuyFeeRate, SellFeeRate, MinFeeEurCents) of
+                        ok ->
+                            reply_json(200, #{<<"status">> => <<"updated">>, <<"tenant_id">> => TenantId}, Req1);
+                        {error, invalid_params} ->
+                            aurix_auth_middleware:reply_error(400, <<"invalid_params">>, <<"Fee rates must be positive decimals, min fee must be non-negative integer">>, Req1)
+                    end;
+                _ ->
+                    aurix_auth_middleware:reply_error(400, <<"bad_request">>, <<"Missing required fields: buy_fee_rate, sell_fee_rate, min_fee_eur_cents">>, Req1)
+            end;
+        _ ->
+            aurix_auth_middleware:reply_error(405, <<"method_not_allowed">>, <<"Method not allowed">>, Req0)
+    end;
+
 %% US-4.5 — POST /admin/gold-price
 handle_action(update_gold_price, Req0) ->
     case cowboy_req:method(Req0) of
@@ -64,6 +89,16 @@ handle_action(update_gold_price, Req0) ->
                 _ ->
                     aurix_auth_middleware:reply_error(400, <<"bad_request">>, <<"Missing price_eur field">>, Req1)
             end;
+        _ ->
+            aurix_auth_middleware:reply_error(405, <<"method_not_allowed">>, <<"Method not allowed">>, Req0)
+    end;
+
+%% POST /admin/etl/trigger
+handle_action(trigger_etl, Req0) ->
+    case cowboy_req:method(Req0) of
+        <<"POST">> ->
+            aurix_admin_service:trigger_etl(),
+            reply_json(200, #{<<"status">> => <<"triggered">>}, Req0);
         _ ->
             aurix_auth_middleware:reply_error(405, <<"method_not_allowed">>, <<"Method not allowed">>, Req0)
     end.

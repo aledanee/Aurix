@@ -52,5 +52,7 @@ routes() ->
         %% Admin (protected, role=admin)
         {"/admin/tenants", aurix_admin_handler, #{action => list_tenants}},
         {"/admin/tenants/:tenant_id/deactivate", aurix_admin_handler, #{action => deactivate_tenant}},
-        {"/admin/gold-price", aurix_admin_handler, #{action => update_gold_price}}
+        {"/admin/gold-price", aurix_admin_handler, #{action => update_gold_price}},
+        {"/admin/tenants/:tenant_id/fees", aurix_admin_handler, #{action => update_fee_config}},
+        {"/admin/etl/trigger", aurix_admin_handler, #{action => trigger_etl}}
     ].

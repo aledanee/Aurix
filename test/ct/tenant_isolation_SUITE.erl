@@ -11,17 +11,17 @@ all() ->
 init_per_suite(Config) ->
     application:ensure_all_started(aurix),
     inets:start(),
+    wait_for_http(),
 
-    %% Ensure partner-co tenant has a fee config so buy operations work.
-    %% The seed data only creates fee config for aurix-demo.
+    %% Ensure partner-co tenant has a fee config so buy operations work
     ensure_partner_fee_config(),
 
     %% Register user in tenant A (aurix-demo)
-    EmailA = <<"iso-a-", (integer_to_binary(erlang:system_time(microsecond)))/binary, "@example.com">>,
+    EmailA = unique_email(<<"iso-a">>),
     {ok, TokenA} = register_and_login(<<"aurix-demo">>, EmailA, <<"TestPassword123">>),
 
     %% Register user in tenant B (partner-co)
-    EmailB = <<"iso-b-", (integer_to_binary(erlang:system_time(microsecond)))/binary, "@example.com">>,
+    EmailB = unique_email(<<"iso-b">>),
     {ok, TokenB} = register_and_login(<<"partner-co">>, EmailB, <<"TestPassword123">>),
 
     %% Buy some gold as user A
@@ -35,6 +35,10 @@ init_per_suite(Config) ->
 
 end_per_suite(_Config) ->
     ok.
+
+%% -------------------------------------------------------------------
+%% Test Cases
+%% -------------------------------------------------------------------
 
 wallet_isolation_test(Config) ->
     TokenA = proplists:get_value(token_a, Config),
@@ -52,13 +56,12 @@ wallet_isolation_test(Config) ->
         {"http://localhost:8080/wallet", [AuthB]}, [], []),
     WalletB = jsx:decode(list_to_binary(BodyB), [return_maps]),
 
-    %% User A bought gold, gold balance should be > 0
-    %% User B didn't buy gold, gold balance should be "0.00000000"
-    ?assertNotEqual(maps:get(<<"gold_balance_grams">>, WalletA),
-                    maps:get(<<"gold_balance_grams">>, WalletB)),
     %% Different wallet IDs
     ?assertNotEqual(maps:get(<<"wallet_id">>, WalletA),
-                    maps:get(<<"wallet_id">>, WalletB)).
+                    maps:get(<<"wallet_id">>, WalletB)),
+    %% User A bought gold, User B didn't - gold balances differ
+    ?assertNotEqual(maps:get(<<"gold_balance_grams">>, WalletA),
+                    maps:get(<<"gold_balance_grams">>, WalletB)).
 
 transaction_isolation_test(Config) ->
     TokenB = proplists:get_value(token_b, Config),
@@ -71,7 +74,24 @@ transaction_isolation_test(Config) ->
     Items = maps:get(<<"items">>, Result),
     ?assertEqual([], Items).
 
+%% -------------------------------------------------------------------
 %% Helpers
+%% -------------------------------------------------------------------
+
+wait_for_http() ->
+    wait_for_http(30).
+
+wait_for_http(0) ->
+    error(http_server_not_ready);
+wait_for_http(N) ->
+    case httpc:request(get, {"http://localhost:8080/health", []}, [{timeout, 1000}], []) of
+        {ok, {{_, 200, _}, _, _}} -> ok;
+        _ -> timer:sleep(500), wait_for_http(N - 1)
+    end.
+
+unique_email(Prefix) ->
+    TS = integer_to_binary(erlang:system_time(microsecond)),
+    <<Prefix/binary, "-", TS/binary, "@example.com">>.
 
 register_and_login(TenantCode, Email, Password) ->
     RegBody = jsx:encode(#{
@@ -92,12 +112,11 @@ register_and_login(TenantCode, Email, Password) ->
     {ok, maps:get(<<"access_token">>, Tokens)}.
 
 %% Insert fee config for partner-co if it doesn't exist.
-%% partner-co tenant_id = b0000000-0000-0000-0000-000000000002
 ensure_partner_fee_config() ->
     TenantId = <<"b0000000-0000-0000-0000-000000000002">>,
     FeeId = <<"d0000000-0000-0000-0000-000000000001">>,
     SQL = "INSERT INTO tenant_fee_config (id, tenant_id, buy_fee_rate, sell_fee_rate, min_fee_eur_cents) "
           "VALUES ($1, $2, 0.005000, 0.005000, 50) "
           "ON CONFLICT (tenant_id) DO NOTHING",
-    aurix_db:query(SQL, [FeeId, TenantId]),
+    pgapp:equery(SQL, [FeeId, TenantId]),
     ok.
