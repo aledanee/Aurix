@@ -1,0 +1,34 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Erlang/OTP
+_build/
+deps/
+*.beam
+*.plt
+erl_crash.dump
+rebar3.crashdump
+*.ez
+
+# Node / React
+node_modules/
+build/
+dist/
+.env
+.env.local
+.env.production
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
