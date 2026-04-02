@@ -13,6 +13,12 @@
     "build": "react-scripts build",
     "test": "react-scripts test"
   },
+  "eslintConfig": {
+    "extends": ["react-app"],
+    "rules": {
+      "react-hooks/exhaustive-deps": "off"
+    }
+  },
   "proxy": "http://localhost:8080",
   "browserslist": {
     "production": [">0.2%", "not dead", "not op_mini all"],

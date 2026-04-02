@@ -11,7 +11,6 @@ export default function DashboardPage() {
   useEffect(() => {
     wallet.execute();
     txns.execute(null, 5);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
