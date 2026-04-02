@@ -48,7 +48,18 @@ schedule_poll() ->
     erlang:send_after(?POLL_INTERVAL_MS, self(), poll).
 
 do_poll(State) ->
-    %% TODO: query outbox_events WHERE published_at IS NULL
-    %% publish each to Kafka / log
-    %% mark published
-    State.
+    case aurix_repo_outbox:get_unpublished(100) of
+        {ok, []} ->
+            State;
+        {ok, Events} ->
+            lists:foreach(fun publish_event/1, Events),
+            State
+    end.
+
+publish_event(Event) ->
+    EventType = maps:get(event_type, Event),
+    EventId = maps:get(id, Event),
+    TenantId = maps:get(tenant_id, Event),
+    logger:info("Dispatching event ~p: type=~s tenant=~s", [EventId, EventType, TenantId]),
+    %% In production: publish to Kafka here
+    ok = aurix_repo_outbox:mark_published(EventId).

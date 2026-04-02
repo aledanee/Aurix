@@ -25,6 +25,7 @@ init([]) ->
         period => 60
     },
     Children = [
+        child_spec(aurix_redis, worker),
         child_spec(aurix_price_provider, worker),
         child_spec(aurix_rate_limiter, worker),
         child_spec(aurix_outbox_dispatcher, worker),
